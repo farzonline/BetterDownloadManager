@@ -9,7 +9,7 @@ public static class SegmentSidecar
     public static void Save(string path, SegmentMap map, string? etag, string? lastModified)
     {
         var dto = new Dto(map.Length, etag, lastModified,
-            map.Segments.Select(s => new[] { s.Start, s.End, Interlocked.Read(ref s.Downloaded) }).ToList());
+            map.Snapshot().Select(s => new[] { s.Start, s.End, Math.Min(Interlocked.Read(ref s.Downloaded), s.End - s.Start + 1) }).ToList());
         var tmp = path + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(dto));
         File.Move(tmp, path, overwrite: true);

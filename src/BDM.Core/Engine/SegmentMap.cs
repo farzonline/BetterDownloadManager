@@ -5,7 +5,10 @@ public class SegmentMap
     readonly List<Segment> _segments;
     public long Length { get; }
     public IReadOnlyList<Segment> Segments => _segments;
-    public bool IsComplete => _segments.All(s => s.Remaining <= 0);
+    public bool IsComplete => Snapshot().All(s => s.Remaining <= 0);
+
+    /// <summary>Thread-safe copy of the segment list (splits can happen while workers run).</summary>
+    public IReadOnlyList<Segment> Snapshot() { lock (_segments) return _segments.ToList(); }
 
     public SegmentMap(long length, IEnumerable<Segment> segments)
     {
