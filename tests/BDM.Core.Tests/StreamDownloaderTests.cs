@@ -183,8 +183,8 @@ public class StreamDownloaderTests : IClassFixture<StreamMedia>
         await using var server = new StreamServer(_m.Root);
         var dl = Make(new FfmpegLocator(null, _ => null));
         var src = Hls(server.Url("hls/index.m3u8"));
-        var ex = await Assert.ThrowsAsync<FfmpegMissingException>(() =>
-            dl.DownloadAsync(src, (Make().ListChoicesAsync(src, default).GetAwaiter().GetResult())[0], NewDir(), null, default, Opts()));
+        var choice = (await Make().ListChoicesAsync(src, default))[0];
+        var ex = await Assert.ThrowsAsync<FfmpegMissingException>(() => dl.DownloadAsync(src, choice, NewDir(), null, default, Opts()));
         Assert.Contains("ffmpeg", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Options", ex.Message);
         Assert.DoesNotContain(server.Requests, r => r.Path.EndsWith(".ts")); // failed fast, before fetching segments

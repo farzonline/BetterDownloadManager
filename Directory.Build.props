@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Better Download Manager is Windows-only by design (DPAPI vault, registry, WPF). Silence the per-call-site platform warnings. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+</Project>

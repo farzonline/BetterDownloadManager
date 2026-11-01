@@ -51,6 +51,10 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\bdm-host.exe"; Parameters: "--register {#ExtensionId} chrome edge brave"; Flags: runhidden; StatusMsg: "Connecting to your browsers..."
 Filename: "{app}\BDM.App.exe"; Description: "Start {#AppName}"; Flags: postinstall nowait skipifsilent
 
+[UninstallDelete]
+; Written by "bdm-host --register" after installation, so the installer does not know about it.
+Type: files; Name: "{app}\com.bdm.host.json"
+
 [UninstallRun]
 Filename: "{app}\bdm-host.exe"; Parameters: "--unregister chrome edge brave"; Flags: runhidden; RunOnceId: "UnregisterHost"
 
