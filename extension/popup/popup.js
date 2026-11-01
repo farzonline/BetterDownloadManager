@@ -47,3 +47,25 @@ function render(tabId, items) {
 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 const { items } = await chrome.runtime.sendMessage({ type: 'list', tabId: tab.id });
 render(tab.id, items);
+
+// ---- per-site switches ----
+import { createSiteSettings, hostKey } from '../src/siteSettings.js';
+const siteSettings = createSiteSettings(chrome.storage.sync);
+const host = hostKey(tab.url);
+const deepBox = document.getElementById('deep');
+if (host) {
+  const site = await siteSettings.get(host);
+  const label = document.createElement('label');
+  const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: site.debugger });
+  label.append(check, ` Deep scan ${host} (Chrome will show a “debugging this browser” bar)`);
+  const take = Object.assign(document.createElement('input'), { type: 'checkbox', checked: site.takeover });
+  const label2 = document.createElement('label');
+  label2.style.display = 'block';
+  label2.append(take, ` Let BDM take over downloads from ${host}`);
+  check.onchange = async () => {
+    if (check.checked && !(await chrome.permissions.request({ permissions: ['debugger'] }))) { check.checked = false; return; }
+    await siteSettings.set(host, { debugger: check.checked });
+  };
+  take.onchange = () => siteSettings.set(host, { takeover: take.checked });
+  deepBox.append(label, label2);
+}

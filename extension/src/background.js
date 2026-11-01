@@ -3,6 +3,8 @@ import { createNetworkDetector } from './detect/network.js';
 import { DEFAULT_SETTINGS, takeOverDownload } from './takeover.js';
 import { buildMessage, sendToHost } from './host.js';
 import { handlePageMessage, pickBest } from './detect/page.js';
+import { createSiteSettings, hostKey, withSiteOverrides } from './siteSettings.js';
+import { createDebuggerFallback } from './detect/debugger-fallback.js';
 
 const ALT_WINDOW_MS = 10_000;
 const altClicks = new Map(); // url -> timestamp
@@ -45,11 +47,28 @@ const filter = { urls: ['<all_urls>'] };
 chrome.webRequest.onSendHeaders.addListener((d) => detector.onSendHeaders(d), filter, ['requestHeaders', 'extraHeaders']);
 chrome.webRequest.onHeadersReceived.addListener(async (d) => { await ready; await detector.onHeadersReceived(d); }, filter, ['responseHeaders', 'extraHeaders']);
 
+const siteSettings = createSiteSettings(chrome.storage.sync);
+let deep = null;
+// chrome.debugger only exists once the owner granted the optional permission, so (re)register when it appears.
+function setupDeepScan() {
+  if (deep || !chrome.debugger) return;
+  deep = createDebuggerFallback({ api: chrome.debugger, registry, siteSettings, getTab: (id) => tabs.get(id) });
+  chrome.debugger.onEvent.addListener((src, method, params) => deep.onEvent(src, method, params));
+  chrome.debugger.onDetach.addListener((src, reason) => deep.onDetach(src, reason));
+  for (const [id, t] of tabs) if (t.url) deep.onTabUpdated(id, t.url);
+}
+setupDeepScan();
+chrome.permissions.onAdded.addListener(setupDeepScan);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes.siteSettings && deep) for (const [id, t] of tabs) if (t.url) deep.onTabUpdated(id, t.url);
+});
+
 chrome.tabs.onUpdated.addListener((id, change, tab) => {
   tabs.set(id, { url: tab.url, title: tab.title });
+  if (deep && tab.url && (change.url || change.status === 'complete')) deep.onTabUpdated(id, tab.url);
   if (change.status === 'loading' && change.url) { registry.clear(id); chrome.storage.session.remove(`tab:${id}`).catch(() => {}); }
 });
-chrome.tabs.onRemoved.addListener((id) => { tabs.delete(id); registry.clear(id); chrome.storage.session.remove(`tab:${id}`).catch(() => {}); });
+chrome.tabs.onRemoved.addListener((id) => { deep?.onTabRemoved(id); tabs.delete(id); registry.clear(id); chrome.storage.session.remove(`tab:${id}`).catch(() => {}); });
 
 const notify = (message) =>
   chrome.notifications.create({ type: 'basic', iconUrl: 'icon.png', title: 'Better Download Manager', message }).catch(() => {});
@@ -58,7 +77,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
   (async () => {
     try {
       await takeOverDownload(item, {
-        settings: await getSettings(),
+        settings: withSiteOverrides(await getSettings(), hostKey(item.finalUrl || item.url), await siteSettings.get(item.finalUrl || item.url)),
         altRecent: (url) => Date.now() - (altClicks.get(url) ?? 0) < ALT_WINDOW_MS,
         sendToHost,
         buildMessage: (i) => buildMessage(i, { cookies: chrome.cookies }),
