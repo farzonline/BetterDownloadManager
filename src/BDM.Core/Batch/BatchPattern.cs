@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace BDM.Core.Batch;
@@ -24,7 +25,7 @@ public static class BatchPattern
             parts.Add(options);
             pos = m.Index + m.Length;
             total *= options.Count;
-            if (total > MaxUrls) throw new ArgumentException($"The pattern expands to more than {MaxUrls} addresses.");
+            if (total > MaxUrls) throw new ArgumentException($"The pattern expands to more than {MaxUrls.ToString("N0", CultureInfo.InvariantCulture)} addresses.");
         }
         parts.Add(new() { pattern[pos..] });
 
@@ -39,7 +40,7 @@ public static class BatchPattern
         if (long.TryParse(from, out var a) && long.TryParse(to, out var b))
         {
             if (b < a) return null;
-            if (b - a + 1 > MaxUrls) throw new ArgumentException($"The pattern expands to more than {MaxUrls} addresses.");
+            if (b - a + 1 > MaxUrls) throw new ArgumentException($"The pattern expands to more than {MaxUrls.ToString("N0", CultureInfo.InvariantCulture)} addresses.");
             var width = from.Length == to.Length && from[0] == '0' ? from.Length : 0;
             return Enumerable.Range(0, (int)(b - a + 1)).Select(i => (a + i).ToString().PadLeft(width, '0')).ToList();
         }

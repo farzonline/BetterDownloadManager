@@ -146,4 +146,20 @@ public class ManagerIntegrationTests
         await WaitFor(m, c, r => r.State == DownloadState.Completed);
         Assert.True(sw2.Elapsed.TotalSeconds < 1.0, $"unlimited download took {sw2.Elapsed.TotalSeconds:F2}s");
     }
+
+    [Fact]
+    public void Manager_ReloadFromStore_PicksUpImportedDownloads_AsPaused_AndIsIdempotent()
+    {
+        var (m, _, store) = Make();
+        var rec = new DownloadRecord(Guid.NewGuid(), Req(new Uri("https://x/a.zip"), "."), DownloadState.Running, 5, 10, null, "main", DateTime.UtcNow);
+        store.Upsert(rec); // what a settings import does
+        var seen = new List<Guid>();
+        m.Changed += r => seen.Add(r.Id);
+
+        Assert.Equal(1, m.ReloadFromStore());
+
+        Assert.Equal(DownloadState.Paused, m.Get(rec.Id)!.State); // nothing is running yet, so it cannot be "Running"
+        Assert.Contains(rec.Id, seen);
+        Assert.Equal(0, m.ReloadFromStore());
+    }
 }

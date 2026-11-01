@@ -48,6 +48,16 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void AddUrl_WithProxyProfile_SetsItOnTheRequest()
+    {
+        var (vm, m, _, _) = Make();
+        var routed = vm.AddUrl("https://files.example/a.zip", "surf1");
+        var plain = vm.AddUrl("https://files.example/b.zip", "");
+        Assert.Equal("surf1", m.Get(routed)!.Request.ProxyProfileId);
+        Assert.Null(m.Get(plain)!.Request.ProxyProfileId); // blank = "no override"
+    }
+
+    [Fact]
     public void AddUrl_RejectsNonDownloadableAddresses()
     {
         var (vm, _, _, _) = Make();

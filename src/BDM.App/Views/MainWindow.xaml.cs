@@ -15,19 +15,19 @@ public partial class MainWindow : Window
     readonly MainViewModel _vm;
     readonly DownloadManager _manager;
     readonly AppSettings _settings;
-    readonly HttpClient _http;
+    readonly AppServices _svc;
     readonly Dictionary<Guid, DownloadState> _lastStates = new();
 
     /// <summary>Raised on the UI thread when a download finishes (the app shows a tray notification if the window is hidden).</summary>
     public event Action<string>? DownloadCompleted;
 
-    public MainWindow(MainViewModel vm, DownloadManager manager, AppSettings settings, HttpClient http)
+    public MainWindow(MainViewModel vm, AppServices svc)
     {
         InitializeComponent();
         _vm = vm;
-        _manager = manager;
-        _settings = settings;
-        _http = http;
+        _svc = svc;
+        var manager = _manager = svc.Manager;
+        _settings = svc.Settings;
         DataContext = vm;
         Crest.Source = AppIcon.Image();
         Icon = AppIcon.Image();
@@ -45,11 +45,11 @@ public partial class MainWindow : Window
     public void ShowAddDialog(string? initialUrl)
     {
         if (!IsVisible) { Show(); }
-        var dlg = new AddUrlDialog(_http, _settings, initialUrl) { Owner = this };
+        var dlg = new AddUrlDialog(_svc.Clients.Get(null), _settings, initialUrl, _svc.Clients.Choices("Use the default")) { Owner = this };
         if (dlg.ShowDialog() != true) return;
         try
         {
-            var id = _vm.AddUrl(dlg.Url);
+            var id = _vm.AddUrl(dlg.Url, dlg.ProxyProfileId);
             if (!dlg.StartNow) _manager.Pause(id);
         }
         catch (ArgumentException e) { ShowBanner(e.Message, error: true); }
@@ -102,6 +102,25 @@ public partial class MainWindow : Window
         ShowBanner($"{name} is complete", false,
             ("Open", () => { if (path != null) new ExplorerShell().Open(path); }),
             ("Show in folder", () => { if (path != null) new ExplorerShell().ShowInFolder(path); }));
+    }
+
+    // ---------------------------------------------------------------- more menu
+
+    void More_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = MoreButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        void Item(string header, Action act) { var mi = new MenuItem { Header = header }; mi.Click += (_, _) => act(); menu.Items.Add(mi); }
+        Item("Batch download…", () => new BatchWindow(_vm) { Owner = this }.ShowDialog());
+        Item("Site grabber…", () => new GrabberWindow(_svc) { Owner = this }.ShowDialog());
+        menu.Items.Add(new Separator());
+        Item("Queues and schedule…", () => new QueuesWindow(_svc) { Owner = this }.ShowDialog());
+        Item("Site logins…", () => new SitesLoginWindow(_svc) { Owner = this }.ShowDialog());
+        Item("Proxy and VPN profiles…", () => new ProxyProfilesWindow(_svc) { Owner = this }.ShowDialog());
+        Item("Download history…", () => new HistoryWindow(_svc) { Owner = this }.ShowDialog());
+        menu.Items.Add(new Separator());
+        Item("Show or hide drop target", () => ((App)Application.Current).ToggleDropTarget());
+        Item("Options…", () => new OptionsWindow(_svc) { Owner = this }.ShowDialog());
+        menu.IsOpen = true;
     }
 
     // ---------------------------------------------------------------- list

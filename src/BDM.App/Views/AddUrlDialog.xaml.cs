@@ -17,14 +17,18 @@ public partial class AddUrlDialog : Window
 
     public string Url => UrlBox.Text.Trim();
     public bool StartNow { get; private set; }
+    /// <summary>"" = use the queue/default routing.</summary>
+    public string ProxyProfileId => ProxyBox.SelectedValue as string ?? "";
 
-    public AddUrlDialog(HttpClient http, AppSettings settings, string? initialUrl)
+    public AddUrlDialog(HttpClient http, AppSettings settings, string? initialUrl, IReadOnlyList<ProxyChoice> proxies)
     {
         InitializeComponent();
         ThemeManager.Attach(this);
         Icon = AppIcon.Image();
         _http = http;
         _settings = settings;
+        ProxyBox.ItemsSource = proxies;
+        ProxyBox.SelectedIndex = 0;
         _debounce.Tick += async (_, _) => { _debounce.Stop(); await ProbeAsync(); };
         UrlBox.Text = initialUrl ?? "";
         UrlBox.SelectAll();

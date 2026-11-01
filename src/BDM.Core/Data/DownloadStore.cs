@@ -78,6 +78,8 @@ public sealed class DownloadStore : IDisposable
     public QueueDefinition? Queue(string id) =>
         Query("SELECT json FROM queues WHERE id=$id", ("$id", id)).Select(j => JsonSerializer.Deserialize<QueueDefinition>(j, Json)!).FirstOrDefault();
 
+    public void DeleteQueue(string id) => Exec("DELETE FROM queues WHERE id=$id", ("$id", id));
+
     public void SaveQueue(QueueDefinition q) => Exec(
         "INSERT INTO queues(id,json) VALUES($id,$j) ON CONFLICT(id) DO UPDATE SET json=$j",
         ("$id", q.Id), ("$j", JsonSerializer.Serialize(q, Json)));

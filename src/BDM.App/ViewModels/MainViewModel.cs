@@ -67,12 +67,14 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public Guid AddUrl(string url)
+    /// <param name="proxyProfileId">Route just this download through that proxy profile; blank = no override.</param>
+    public Guid AddUrl(string url, string? proxyProfileId = null)
     {
         if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https" or "ftp" or "ftps"))
             throw new ArgumentException("That is not a downloadable address.", nameof(url));
         var category = Services.Categories.For(Services.Categories.NameFromUrl(uri));
-        return _manager.Add(new DownloadRequest(uri, null, null, new Dictionary<string, string>(), null, null, category,
+        return _manager.Add(new DownloadRequest(uri, null, null, new Dictionary<string, string>(), null,
+            string.IsNullOrWhiteSpace(proxyProfileId) ? null : proxyProfileId, category,
             Services.Categories.FolderFor(_settings, category)));
     }
 

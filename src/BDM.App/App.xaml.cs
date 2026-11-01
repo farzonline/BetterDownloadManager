@@ -24,6 +24,7 @@ public partial class App : Application
     DownloadStore? _store;
     MainWindow? _window;
     HostMessageHandler? _handler;
+    AppServices? _svc;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -42,11 +43,16 @@ public partial class App : Application
         Directory.CreateDirectory(AppSettings.DataDir);
         _store = new DownloadStore(Path.Combine(AppSettings.DataDir, "bdm.db"));
         var vault = new CredentialVault(Path.Combine(AppSettings.DataDir, "vault.json"));
-        var http = HttpClients.Create(null, vault);
-        var manager = new DownloadManager(_store, _ => http)
+        var profiles = new ProxyProfileStore(Path.Combine(AppSettings.DataDir, "profiles.json"));
+        var logins = new SiteLogins(Path.Combine(AppSettings.DataDir, "logins.json"), vault);
+        var clients = new ProxyClientProvider(profiles, vault);
+
+        // Read the ffmpeg path live so changing it in Options needs no restart.
+        var ffmpeg = new FfmpegLocator(null, _ => FfmpegLocator.Find(settings.FfmpegPath));
+        var manager = new DownloadManager(_store, clients.Get)
         {
-            // Read the ffmpeg path live so changing it in Options needs no restart.
-            Streams = new StreamDownloader(http, new FfmpegLocator(null, _ => FfmpegLocator.Find(settings.FfmpegPath))),
+            StreamsFor = c => new StreamDownloader(c, ffmpeg),
+            Logins = logins,
         };
         _connectivity = new ConnectivityWatcher();
         manager.Watch(_connectivity);
@@ -56,11 +62,17 @@ public partial class App : Application
         _pipe.Start();
 
         var vm = new MainViewModel(manager, settings, new ExplorerShell(), a => Dispatcher.BeginInvoke(a));
-        _window = new MainWindow(vm, manager, settings, http);
+        _svc = new AppServices
+        {
+            Settings = settings, Manager = manager, Store = _store, Profiles = profiles, Vault = vault, Logins = logins, Clients = clients, Main = vm,
+            ApplySettings = () => ApplySettings(settings, manager),
+        };
+        _window = new MainWindow(vm, _svc);
         MainWindow = _window;
         _handler.Activated += () => Dispatcher.BeginInvoke(ShowMainWindow);
+        ApplySettings(settings, manager);
 
-        _tray = new TrayHost(ShowMainWindow, () => Dispatcher.Invoke(() => _window.ShowAddDialog(null)), ToggleDropTarget, ExitApp);
+        _tray = new TrayHost(ShowMainWindow, () => Dispatcher.Invoke(() => _window.ShowAddDialog(null)), () => Dispatcher.Invoke(ToggleDropTarget), ExitApp);
         _window.DownloadCompleted += name => { if (!_window.IsVisible) _tray.Notify("Download complete", name); };
 
         var filter = new ClipboardUrlFilter(() => settings);
@@ -74,6 +86,22 @@ public partial class App : Application
             await _handler.HandleAsync(new HostMessage("add", arg, null, null, null, null, null, null));
     }
 
+    /// <summary>Pushes the saved settings into the engine, the theme and the Windows startup entry.</summary>
+    void ApplySettings(AppSettings settings, DownloadManager manager)
+    {
+        SettingsApplier.Apply(settings, manager, _store!, RunAntivirusAsync);
+        ThemeManager.Apply(settings.ThemeMode);
+        try { StartupRegistration.Set(settings.StartWithWindows, Environment.ProcessPath!); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException) { /* locked-down PC: leave startup as it was */ }
+    }
+
+    async Task RunAntivirusAsync(string command, string path)
+    {
+        var result = await AntivirusRunner.RunAsync(command, path);
+        var problem = result.Error ?? (result.ExitCode is null or 0 ? null : $"The virus scan flagged {Path.GetFileName(path)} (it reported code {result.ExitCode}).");
+        if (problem != null) await Dispatcher.BeginInvoke(() => _window?.ShowBanner(problem, error: true));
+    }
+
     void ShowMainWindow()
     {
         if (_window == null) return;
@@ -82,13 +110,10 @@ public partial class App : Application
         _window.Activate();
     }
 
-    void ToggleDropTarget()
+    public void ToggleDropTarget()
     {
-        Dispatcher.Invoke(() =>
-        {
-            _drop ??= new DropTargetWindow(url => { try { (_window?.DataContext as MainViewModel)?.AddUrl(url); } catch (ArgumentException) { } });
-            if (_drop.IsVisible) _drop.Hide(); else _drop.Show();
-        });
+        _drop ??= new DropTargetWindow(url => { try { (_window?.DataContext as MainViewModel)?.AddUrl(url); } catch (ArgumentException) { } });
+        if (_drop.IsVisible) _drop.Hide(); else _drop.Show();
     }
 
     void ExitApp()

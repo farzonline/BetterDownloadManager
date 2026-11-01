@@ -99,6 +99,23 @@ public class DownloadManager
         return rec.Id;
     }
 
+    /// <summary>Adopts downloads that were written straight into the store (a settings import). Returns how many were new.</summary>
+    public int ReloadFromStore()
+    {
+        var added = new List<DownloadRecord>();
+        lock (_gate)
+        {
+            foreach (var r in _store.All().Where(r => !_records.ContainsKey(r.Id)))
+            {
+                var adopted = r.State == DownloadState.Running ? r with { State = DownloadState.Paused } : r;
+                _records[r.Id] = adopted;
+                added.Add(adopted);
+            }
+        }
+        foreach (var r in added) { _store.Upsert(r); Changed?.Invoke(r); }
+        return added.Count;
+    }
+
     /// <summary>JSON dump of every download and queue (settings export / backup).</summary>
     public string ExportAll() => _store.Export();
 

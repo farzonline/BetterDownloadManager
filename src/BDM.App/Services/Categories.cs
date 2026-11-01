@@ -24,8 +24,11 @@ public static class Categories
         return ByType.FirstOrDefault(kv => kv.Value.Contains(ext)).Key ?? "Other";
     }
 
-    public static string FolderFor(AppSettings s, string category) =>
-        Path.Combine(s.DownloadRoot, ByType.ContainsKey(category) ? category : "Other");
+    public static string FolderFor(AppSettings s, string category)
+    {
+        var key = ByType.ContainsKey(category) ? category : "Other";
+        return s.CategoryFolders.TryGetValue(key, out var custom) && !string.IsNullOrWhiteSpace(custom) ? custom : Path.Combine(s.DownloadRoot, key);
+    }
 
     public static string NameFromUrl(Uri url)
     {

@@ -11,6 +11,8 @@
     <TextBox x:Name="UrlBox" TextChanged="UrlBox_TextChanged" AutomationProperties.Name="Download address" ToolTip="http, https or ftp address"/>
     <TextBlock x:Name="Info" Style="{StaticResource Text.Caption}" Margin="0,8,0,0" MinHeight="16" TextTrimming="CharacterEllipsis"
                AutomationProperties.LiveSetting="Polite"/>
+    <TextBlock Text="Route through" Style="{StaticResource Text.Caption}" Margin="0,16,0,6"/>
+    <ComboBox x:Name="ProxyBox" DisplayMemberPath="Name" SelectedValuePath="Id" AutomationProperties.Name="Route through"/>
     <TextBlock x:Name="Folder" Style="{StaticResource Text.Mono}" Foreground="{DynamicResource Brush.TextMuted}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
       <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0"/>

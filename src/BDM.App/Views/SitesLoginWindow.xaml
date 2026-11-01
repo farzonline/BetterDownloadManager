@@ -1,0 +1,38 @@
+<Window x:Class="BDM.App.Views.SitesLoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Site logins" Width="600" Height="520" MinHeight="420" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Surface}" Foreground="{DynamicResource Brush.Text}"
+        FontFamily="{DynamicResource Font.Text}" FontSize="{DynamicResource FontSize.Body}">
+  <Grid Margin="24">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel>
+      <TextBlock Text="Site logins" Style="{StaticResource Text.Title}"/>
+      <TextBlock Text="BDM sends these when a site asks for a user name and password (HTTP login). A login for example.com also covers its subdomains."
+                 Style="{StaticResource Text.Caption}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+    </StackPanel>
+    <TextBlock Grid.Row="1" Text="No saved logins yet." Style="{StaticResource Text.Caption}" VerticalAlignment="Top" Margin="0,4,0,0">
+      <TextBlock.Visibility><Binding Path="Items.Count" Converter="{x:Static local:ZeroToVisible.Instance}" xmlns:local="clr-namespace:BDM.App.Views"/></TextBlock.Visibility>
+    </TextBlock>
+    <ListBox Grid.Row="1" x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" BorderThickness="0"
+             ItemContainerStyle="{StaticResource Style.ListBoxItem}" AutomationProperties.Name="Saved logins">
+      <ListBox.ItemTemplate>
+        <DataTemplate><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Host}" MinWidth="240"/><TextBlock Text="{Binding Username}" Foreground="{DynamicResource Brush.TextMuted}"/></StackPanel></DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <Grid Grid.Row="2" Margin="0,16,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <StackPanel><TextBlock Text="Site" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><TextBox x:Name="HostBox" AutomationProperties.Name="Site"/></StackPanel>
+      <StackPanel Grid.Column="2"><TextBlock Text="User name" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><TextBox x:Name="UserBox" AutomationProperties.Name="User name"/></StackPanel>
+      <StackPanel Grid.Column="4"><TextBlock Text="Password" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><PasswordBox x:Name="PasswordBox" AutomationProperties.Name="Password"/></StackPanel>
+    </Grid>
+    <Grid Grid.Row="3" Margin="0,16,0,0">
+      <TextBlock x:Name="ErrorText" Foreground="{DynamicResource Brush.Danger}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="280" HorizontalAlignment="Left" AutomationProperties.LiveSetting="Assertive"/>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button Content="Remove" Style="{StaticResource Style.Button.Danger}" Click="Remove_Click" Margin="0,0,8,0"/>
+        <Button Content="Close" IsCancel="True" Margin="0,0,8,0"/>
+        <Button Content="Save login" Style="{StaticResource Style.Button.Accent}" IsDefault="True" Click="Save_Click"/>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

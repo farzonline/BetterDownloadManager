@@ -51,6 +51,7 @@
         <Border Width="1" Height="20" Margin="8,0" Background="{DynamicResource Brush.Line}"/>
         <Button Content="&#xE8E5;" Command="{Binding OpenFileCommand}" Style="{StaticResource Style.Button.Icon}" ToolTip="Open file" AutomationProperties.Name="Open file"/>
         <Button Content="&#xE838;" Command="{Binding OpenFolderCommand}" Style="{StaticResource Style.Button.Icon}" ToolTip="Show in folder" AutomationProperties.Name="Show in folder"/>
+        <Button x:Name="MoreButton" Content="&#xE712;" Style="{StaticResource Style.Button.Icon}" ToolTip="More" AutomationProperties.Name="More" Click="More_Click"/>
       </StackPanel>
       <Grid Grid.Column="2" Width="220" Height="32" Margin="0,0,12,0" WindowChrome.IsHitTestVisibleInChrome="True">
         <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Search downloads (Ctrl+F)"

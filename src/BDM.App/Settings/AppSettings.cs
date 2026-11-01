@@ -18,11 +18,29 @@ public class AppSettings
     public string? YtDlpPath { get; set; }
     public bool MinimizeToTray { get; set; } = true;
     public bool WatchClipboard { get; set; } = true;
+    public bool StartWithWindows { get; set; }
+    /// <summary>Connections per download for the main queue (1-32).</summary>
+    public int Connections { get; set; } = 8;
+    /// <summary>Total download speed limit in KB/s; 0 = unlimited.</summary>
+    public int SpeedLimitKBps { get; set; }
+    /// <summary>Scanner run on each finished file; {file} is replaced by its path (appended when absent).</summary>
+    public string? AntivirusCommand { get; set; }
+    public string? GlobalProxyId { get; set; }
+    public Dictionary<string, string> CategoryProxies { get; set; } = new();
+    /// <summary>Folder overrides per category; otherwise DownloadRoot\Category.</summary>
+    public Dictionary<string, string> CategoryFolders { get; set; } = new();
     public List<string> ClipboardTypes { get; set; } = new()
     {
         "zip", "rar", "7z", "gz", "tgz", "bz2", "xz", "tar", "iso", "exe", "msi", "msix", "apk", "dmg", "mp4", "mkv", "avi", "mov",
         "wmv", "flv", "webm", "m4v", "mp3", "flac", "wav", "m4a", "pdf", "epub", "docx", "xlsx", "pptx", "m3u8", "mpd",
     };
+
+    /// <summary>Copies every setting from another instance (used by import and by the options window).</summary>
+    public void CopyFrom(AppSettings other)
+    {
+        foreach (var p in typeof(AppSettings).GetProperties().Where(p => p.CanRead && p.CanWrite))
+            p.SetValue(this, p.GetValue(other));
+    }
 
     public static AppSettings Load(string? path = null)
     {

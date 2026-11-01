@@ -1,0 +1,78 @@
+<Window x:Class="BDM.App.Views.ProxyProfilesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Proxy and VPN profiles" Width="680" Height="720" MinHeight="480" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.Surface}" Foreground="{DynamicResource Brush.Text}"
+        FontFamily="{DynamicResource Font.Text}" FontSize="{DynamicResource FontSize.Body}">
+  <Grid Margin="24">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel>
+      <TextBlock Text="Proxy and VPN profiles" Style="{StaticResource Text.Title}"/>
+      <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,12" TextWrapping="Wrap"
+                 Text="Send chosen downloads, a queue, a file type or everything through a proxy. Surfshark's manual-connection proxy servers work here; this only routes BDM's own traffic, not your whole PC."/>
+    </StackPanel>
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,12,0">
+      <StackPanel>
+        <TextBlock Text="SAVED PROFILES" Style="{StaticResource Text.Section}" Margin="0,0,0,8"/>
+        <TextBlock Text="No profiles yet. Add one below, or import a list of Surfshark servers." Style="{StaticResource Text.Caption}" Margin="0,0,0,8" TextWrapping="Wrap">
+          <TextBlock.Visibility><Binding Path="Items.Count" Converter="{x:Static local:ZeroToVisible.Instance}" xmlns:local="clr-namespace:BDM.App.Views"/></TextBlock.Visibility>
+        </TextBlock>
+        <ListBox x:Name="List" ItemsSource="{Binding Items}" Background="Transparent" BorderThickness="0" MaxHeight="180"
+                 ItemContainerStyle="{StaticResource Style.ListBoxItem}" AutomationProperties.Name="Saved profiles">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Name}" MinWidth="170" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding Kind}" MinWidth="70" Foreground="{DynamicResource Brush.TextMuted}"/>
+                <TextBlock Style="{StaticResource Text.Mono}" Foreground="{DynamicResource Brush.TextMuted}"><Run Text="{Binding Host, Mode=OneWay}"/><Run Text=":"/><Run Text="{Binding Port, Mode=OneWay}"/></TextBlock>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Text="New password for the selected profile" Style="{StaticResource Text.Caption}" Margin="0,12,0,4"/>
+        <Grid>
+          <PasswordBox x:Name="NewPasswordBox" Width="220" HorizontalAlignment="Left" AutomationProperties.Name="New password for the selected profile" ToolTip="New password for the selected profile"/>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Set password" Click="SetPassword_Click" Margin="0,0,8,0"/>
+            <Button Content="Remove" Style="{StaticResource Style.Button.Danger}" Click="Remove_Click"/>
+          </StackPanel>
+        </Grid>
+
+        <TextBlock Text="ADD A PROFILE" Style="{StaticResource Text.Section}" Margin="0,28,0,8"/>
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="140"/></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Text="Name" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><TextBox x:Name="NameBox" AutomationProperties.Name="Profile name"/></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Text="Type" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/>
+            <ComboBox x:Name="KindBox" SelectedIndex="1" AutomationProperties.Name="Proxy type"><ComboBoxItem Content="HTTP(S)"/><ComboBoxItem Content="SOCKS5"/></ComboBox></StackPanel>
+        </Grid>
+        <Grid Margin="0,12,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Text="Server" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><TextBox x:Name="HostBox" AutomationProperties.Name="Server"/></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Text="Port" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><TextBox x:Name="PortBox" Text="1080" AutomationProperties.Name="Port"/></StackPanel>
+        </Grid>
+        <Grid Margin="0,12,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Text="User name (optional)" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><TextBox x:Name="UserBox" AutomationProperties.Name="User name"/></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Text="Password (optional)" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><PasswordBox x:Name="PasswordBox" AutomationProperties.Name="Password"/></StackPanel>
+        </Grid>
+        <Button Content="Add profile" Click="Add_Click" HorizontalAlignment="Right" Margin="0,12,0,0"/>
+
+        <TextBlock Text="IMPORT SURFSHARK SERVERS" Style="{StaticResource Text.Section}" Margin="0,28,0,8"/>
+        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,0,0,8"
+                   Text="Paste one server per line as host:port, or name,host,port. Port 1080 is SOCKS5, anything else HTTP(S). Use the service credentials from your Surfshark account's manual setup page, not your login password."/>
+        <TextBox x:Name="ServerListBox" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="96" MaxHeight="160" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                 Padding="10,8" AutomationProperties.Name="Surfshark server list"/>
+        <Grid Margin="0,12,0,0">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Text="Service user name" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><TextBox x:Name="ImportUserBox" AutomationProperties.Name="Service user name"/></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Text="Service password" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/><PasswordBox x:Name="ImportPasswordBox" AutomationProperties.Name="Service password"/></StackPanel>
+        </Grid>
+        <Button Content="Import servers" Click="Import_Click" HorizontalAlignment="Right" Margin="0,12,0,0"/>
+      </StackPanel>
+    </ScrollViewer>
+    <Grid Grid.Row="2" Margin="0,16,0,0">
+      <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="440" HorizontalAlignment="Left" AutomationProperties.LiveSetting="Polite"/>
+      <Button Content="Close" IsCancel="True" IsDefault="True" HorizontalAlignment="Right"/>
+    </Grid>
+  </Grid>
+</Window>

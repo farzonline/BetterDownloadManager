@@ -51,7 +51,7 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
     async Task<HostReply> AddStreamAsync(HostMessage msg, bool ask)
     {
         if (!Uri.TryCreate(msg.Url, UriKind.Absolute, out var url) || !IsDownloadable(url)) return Fail("That is not a downloadable address.");
-        var streams = manager.Streams;
+        var streams = manager.StreamDownloaderFor(manager.ProxyIdFor("Video", "main"));
         if (streams == null) return Fail("Stream downloads are not set up. Check the ffmpeg path in Options.");
 
         var kind = string.Equals(msg.Kind, "dash", StringComparison.OrdinalIgnoreCase) || url.AbsolutePath.EndsWith(".mpd", StringComparison.OrdinalIgnoreCase)
