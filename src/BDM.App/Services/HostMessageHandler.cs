@@ -3,6 +3,7 @@ using BDM.Core.Engine;
 using BDM.Core.Ext;
 using BDM.Core.Http;
 using BDM.Core.Ipc;
+using BDM.Core.Net;
 using BDM.Core.Streams;
 
 namespace BDM.App.Services;
@@ -16,8 +17,9 @@ public interface IQualityPicker
 /// <summary>Turns messages from the browser extension (and second launches) into downloads.</summary>
 /// <param name="prompt">The download dialog shown before a file from the browser starts; null = never ask.</param>
 /// <param name="probe">Looks a file from the browser up first, to learn whether the site lets BDM fetch it; null = don't check.</param>
+/// <param name="relay">The browser relay, for sites that only serve the browser; null = hand those back to the browser.</param>
 public sealed class HostMessageHandler(DownloadManager manager, AppSettings settings, IQualityPicker picker, IDownloadPrompt? prompt = null,
-    Func<DownloadRequest, Task<FileProbe>>? probe = null)
+    Func<DownloadRequest, Task<FileProbe>>? probe = null, RelayEndpoint? relay = null)
 {
     public AppSettings Settings => settings;
     public event Action? Activated;
@@ -31,6 +33,7 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
         switch (msg.Op)
         {
             case "ping": return Ok();
+            case "relayInfo": return relay != null ? Ok() with { RelayPort = relay.Port, RelayToken = relay.Token } : Fail("The browser relay isn't running.");
             case "activate": Activated?.Invoke(); return Ok();
             case "add": return await AddAsync(msg);
             case "addStream":
@@ -52,18 +55,22 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
             .ToDictionary(h => h.Key, h => h.Value);
         var referer = msg.Headers?.FirstOrDefault(h => h.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase)).Value ?? msg.PageUrl;
         var template = new DownloadRequest(url, null, referer, headers, msg.Cookie, null, plan.Category, plan.Folder);
-        if (await RefusesBdmAsync(template))
+        var viaBrowser = await RefusesBdmAsync(template);
+        if (viaBrowser && (relay == null || !msg.CanRelay))
             return new HostReply(false, "This site only lets your browser download the file, so the browser is downloading it.", false, UseBrowser: true);
+        if (viaBrowser) template = template with { ProxyProfileId = BrowserRelay.ProfileId }; // BDM drives it, Chrome fetches it
         if (prompt != null && settings.ShowDownloadDialog)
         {
             // Cancelled still answers Ok: the extension then drops the browser's own copy too, as the owner asked.
             if (await prompt.AskAsync(plan, template) is not { } chosen) return Ok();
             plan = chosen;
         }
-        var id = manager.Add(plan.ApplyTo(template));
+        var request = plan.ApplyTo(template);
+        if (viaBrowser) request = request with { ProxyProfileId = BrowserRelay.ProfileId }; // a proxy picked in the dialog would be refused too
+        var id = manager.Add(request);
         if (!plan.StartNow) manager.Pause(id);
         else if (prompt != null && settings.ShowDownloadDialog) Started?.Invoke(id);
-        return Ok();
+        return viaBrowser ? Ok() with { RelayPort = relay!.Port, RelayToken = relay.Token } : Ok();
     }
 
     /// <summary>

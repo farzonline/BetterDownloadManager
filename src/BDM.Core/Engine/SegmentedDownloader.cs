@@ -204,6 +204,8 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
     static void CheckStatus(HttpResponseMessage resp)
     {
         var code = (int)resp.StatusCode;
+        // 204/205 carry no file: accepting them "finished" downloads as empty files.
+        if (code is 204 or 205) throw new HttpRequestException($"The server answered {code} (no content) instead of the file.", null, resp.StatusCode);
         if (resp.IsSuccessStatusCode) return;
         if (code is 401 or 403) throw new DownloadException(DownloadFailure.AuthExpired, $"The server refused access ({code}); the link may have expired.");
         if (code == 416) throw new DownloadException(DownloadFailure.ServerChanged, "The file changed on the server.");

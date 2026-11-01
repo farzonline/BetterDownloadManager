@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { startCorpus } from './corpus-server.mjs';
+import { startCorpus, PROTECTED_FILE } from './corpus-server.mjs';
 import { ROOT, EXTENSION, startBrowser } from './harness.mjs';
 
 const APP = path.join(ROOT, 'src/BDM.App/bin/Debug/net8.0-windows/BDM.App.exe');
@@ -63,7 +63,7 @@ before(async () => {
   corpus = await startCorpus();
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bdm-e2e-data-'));
   downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bdm-e2e-dl-'));
-  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ DownloadRoot: downloadsDir, ThemeMode: 'Dark' }));
+  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ DownloadRoot: downloadsDir, ThemeMode: 'Dark', ShowDownloadDialog: false, ShowProgressWindow: false }));
   app = spawn(APP, ['--background'], { env: { ...process.env, BDM_DATA_DIR: dataDir, BDM_PIPE: PIPE_NAME }, stdio: 'ignore' });
   await waitFor(() => sendToApp({ op: 'ping' }).then((r) => r.ok), 'the app to answer ping', 30_000);
   await waitFor(() => fs.existsSync(path.join(dataDir, 'api.json')), 'the app to publish its API', 10_000);
@@ -128,4 +128,30 @@ test('a DRM-protected stream cannot even be sent to the app', async () => {
   const item = await browser.eventually((i) => i.kind === 'dash' && i.url.includes('/media/drm/manifest.mpd') && i.protected === true, 'the protected manifest');
   await assert.rejects(buildMessage(item, {}), /protected/i);
   await page.close();
+});
+
+test('a file only a real browser may fetch still downloads in BDM: through the browser relay, in several parts', async () => {
+  // Point the extension at the app's relay, as the host's reply would.
+  const relay = await sendToApp({ op: 'relayInfo' });
+  assert.equal(relay.ok, true, relay.error);
+  const page = await browser.context.newPage();
+  await page.goto(`chrome-extension://${browser.extensionId}/options/options.html`);
+  await page.evaluate((r) => chrome.runtime.sendMessage({ type: 'relay-configure', relayPort: r.relayPort, relayToken: r.relayToken }), relay);
+  await page.close();
+
+  const url = `${corpus.url}/protected/file.mp4?sign=abc&t=1`; // shaped like the real link that needed this
+  const reply = await sendToApp(await buildMessage({ kind: 'file', url, headers: {} }, {})); // exactly what the extension sends
+  assert.equal(reply.ok, true, `the app refused it: ${reply.error}`);
+  assert.equal(reply.relayPort, relay.relayPort, 'the app should have routed it through the browser');
+
+  const done = await waitFor(async () => {
+    const row = (await api('/downloads')).find((r) => r.url === url);
+    if (row?.state === 'Failed') assert.fail(`the download failed: ${row.error}`);
+    return row?.state === 'Completed' ? row : undefined;
+  }, 'the protected file to finish downloading', 60_000);
+  const got = fs.readFileSync(done.filePath);
+  const want = fs.readFileSync(PROTECTED_FILE);
+  let at = 0;
+  while (at < Math.min(got.length, want.length) && got[at] === want[at]) at++;
+  assert.ok(got.equals(want), `the file arrived damaged: ${got.length} of ${want.length} bytes, first difference at byte ${at}`);
 });

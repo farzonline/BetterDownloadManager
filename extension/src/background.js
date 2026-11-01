@@ -70,8 +70,35 @@ chrome.tabs.onUpdated.addListener((id, change, tab) => {
 });
 chrome.tabs.onRemoved.addListener((id) => { deep?.onTabRemoved(id); tabs.delete(id); registry.clear(id); chrome.storage.session.remove(`tab:${id}`).catch(() => {}); });
 
-// Hands a found file to BDM, or to the browser itself when the site refuses BDM (see deliver).
-const send = (msg) => deliver(msg, { download: (o) => chrome.downloads.download(o), skipTakeover: (url) => altClicks.set(url, Date.now()) });
+// ---- browser relay: for sites that only serve a real browser, BDM's engine fetches through Chrome (src/relay.js),
+// run by an offscreen document because the service worker is put to sleep within 30 s.
+let relayConfig = null;
+async function useRelay(reply) {
+  if (!reply?.relayPort || !reply.relayToken) return;
+  relayConfig = { base: `http://127.0.0.1:${reply.relayPort}`, token: reply.relayToken };
+  await chrome.storage.session.set({ relayConfig }).catch(() => {});
+  try {
+    if (!(await chrome.offscreen.hasDocument())) {
+      await chrome.offscreen.createDocument({
+        url: 'offscreen/relay.html', reasons: ['WORKERS'],
+        justification: 'Fetches files for Better Download Manager from sites that only let the browser download them.',
+      });
+    }
+  } catch { /* already open */ }
+  chrome.runtime.sendMessage({ type: 'relay-config', ...relayConfig }).catch(() => {});
+}
+/** Reconnects to a running BDM (it may have relay downloads to resume) at most once a minute; never starts BDM. */
+async function refreshRelay(force = false) {
+  const { relayAsked = 0 } = await chrome.storage.session.get('relayAsked').catch(() => ({}));
+  if (!force && Date.now() - relayAsked < 60_000) return;
+  await chrome.storage.session.set({ relayAsked: Date.now() }).catch(() => {});
+  await useRelay(await sendToHost({ op: 'relayInfo' }));
+}
+refreshRelay();
+
+const sendAndRelay = async (msg) => { const r = await sendToHost(msg); await useRelay(r); return r; };
+// Hands a found file to BDM, or to the browser itself when the site refuses BDM and no relay is possible (see deliver).
+const send = (msg) => deliver(msg, { send: sendAndRelay, download: (o) => chrome.downloads.download(o), skipTakeover: (url) => altClicks.set(url, Date.now()) });
 
 const notify = (message) =>
   chrome.notifications.create({ type: 'basic', iconUrl: 'icon.png', title: 'Better Download Manager', message }).catch(() => {});
@@ -82,7 +109,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
       await takeOverDownload(item, {
         settings: withSiteOverrides(await getSettings(), hostKey(item.finalUrl || item.url), await siteSettings.get(item.finalUrl || item.url)),
         altRecent: (url) => Date.now() - (altClicks.get(url) ?? 0) < ALT_WINDOW_MS,
-        sendToHost,
+        sendToHost: sendAndRelay,
         lookup: (url) => registry.find(url),
         buildMessage: (i) => buildMessage(i, { cookies: chrome.cookies }),
         cancel: (id) => chrome.downloads.cancel(id),
@@ -110,6 +137,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
         return r.ok ? r : { ok: false, error: r.error ?? 'BDM is not available.' };
       } catch (e) { return { ok: false, error: String(e.message ?? e) }; }
     }
+    if (msg.type === 'relay-get-config') return relayConfig ?? (await chrome.storage.session.get('relayConfig').catch(() => ({}))).relayConfig ?? null;
+    if (msg.type === 'relay-refresh') { await refreshRelay(true); return {}; }
+    if (msg.type === 'relay-configure' && sender.url?.startsWith(chrome.runtime.getURL(''))) { await useRelay(msg); return {}; } // extension pages only (tests)
     if (msg.type === 'list') return { items: registry.list(msg.tabId) };
     if (msg.type === 'debug-registry') return registry.snapshot(); // used by the acceptance tests
     if (msg.type === 'download-page') {

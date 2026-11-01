@@ -17,8 +17,10 @@ open-source behavior; no code from any commercial product.
   search, settings export/import.
 - **Browser extension** (Chrome, Edge, Brave and other Chromium browsers): takes over big downloads, adds a
   *Download this video* button, a popup listing every video found on the page, and a *Download this page with yt-dlp* button.
-  When a site only lets a real browser fetch a file (Cloudflare-style bot protection), the browser downloads it instead,
-  so a found file is never lost.
+  When a site only lets a real browser fetch a file (Cloudflare-style bot protection), BDM downloads it *through the
+  browser*: its engine still splits, pauses and resumes the file, but Chrome makes the requests with your own session
+  (the extension's offscreen relay page; the browser must stay open). Older extensions fall back to the browser's own
+  download, so a found file is never lost.
 - **Stream catcher**: HLS and DASH (including AES-128 encrypted HLS, separate video/audio tracks, live HLS), found by
   five layers: network responses, the page's own fetch/XHR/MediaSource calls, the page's video elements, iframes and
   service workers, and an optional per-site deep scan.

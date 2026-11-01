@@ -19,11 +19,16 @@ public sealed class ProxyClientProvider(ProxyProfileStore profiles, CredentialVa
     readonly object _gate = new();
     HttpClient? _direct;
 
+    /// <summary>The client that sends requests through the browser (Net.BrowserRelay); null while the relay isn't running.</summary>
+    public HttpClient? Browser { get; set; }
+
     public HttpClient Get(string? profileId)
     {
         lock (_gate)
         {
             if (string.IsNullOrEmpty(profileId)) return _direct ??= HttpClients.Create(null, vault);
+            if (profileId == BrowserRelay.ProfileId)
+                return Browser ?? throw new InvalidOperationException("This download goes through your browser, but BDM's browser relay isn't running. Restart BDM and try again.");
             if (_clients.TryGetValue(profileId, out var c)) return c;
             var profile = profiles.Load().FirstOrDefault(p => p.Id == profileId);
             // A deleted profile must never quietly turn into a direct connection: that would expose the real address the profile was there to hide.
@@ -39,7 +44,9 @@ public sealed class ProxyClientProvider(ProxyProfileStore profiles, CredentialVa
     }
 
     public IReadOnlyList<ProxyChoice> Choices(string noneLabel = "No proxy") =>
-        new[] { new ProxyChoice("", noneLabel) }.Concat(profiles.Load().Select(p => new ProxyChoice(p.Id, p.Name))).ToList();
+        new[] { new ProxyChoice("", noneLabel) }
+            .Concat(Browser != null ? [new ProxyChoice(BrowserRelay.ProfileId, "Through your browser (sites that block download managers)")] : [])
+            .Concat(profiles.Load().Select(p => new ProxyChoice(p.Id, p.Name))).ToList();
 }
 
 /// <summary>Everything the secondary windows need, created once at startup.</summary>

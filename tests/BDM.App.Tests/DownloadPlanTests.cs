@@ -5,6 +5,7 @@ using BDM.Core.Data;
 using BDM.Core.Engine;
 using BDM.Core.Http;
 using BDM.Core.Ipc;
+using BDM.Core.Net;
 
 namespace BDM.App.Tests;
 
@@ -140,6 +141,45 @@ public class DownloadPlanTests
         Assert.Equal("UA", probed!.Headers["User-Agent"]); // probed as the browser would ask
         Assert.Null(prompt.Proposed); // no dialog for a download BDM can't do
         Assert.Empty(m.All());
+    }
+
+    static readonly RelayEndpoint Relay = new(4321, "secret");
+
+    [Fact]
+    public async Task BrowserDownload_TheSiteRefusesBdm_GoesThroughTheBrowserRelay_WhenTheExtensionCanDoIt()
+    {
+        var (m, s) = Engine();
+        var prompt = new Prompt(p => p with { Description = "via chrome" });
+        var h = new HostMessageHandler(m, s, new NoPicker(), prompt, _ => throw new DownloadException(DownloadFailure.AuthExpired, "refused"), Relay);
+
+        var reply = await h.HandleAsync(File("https://cdn.example/file.mp4") with { CanRelay = true });
+
+        Assert.True(reply.Ok);
+        Assert.Equal((4321, "secret"), (reply.RelayPort, reply.RelayToken)); // the extension starts serving the relay
+        Assert.NotNull(prompt.Proposed); // still the owner's dialog
+        var r = Assert.Single(m.All());
+        Assert.Equal(BrowserRelay.ProfileId, r.Request.ProxyProfileId);
+        Assert.Equal("via chrome", r.Request.Description);
+    }
+
+    [Fact]
+    public async Task BrowserDownload_AnOlderExtension_StillGetsTheBrowserFallback()
+    {
+        var (m, s) = Engine();
+        var h = new HostMessageHandler(m, s, new NoPicker(), null, _ => throw new DownloadException(DownloadFailure.AuthExpired, "refused"), Relay);
+        var reply = await h.HandleAsync(File("https://cdn.example/file.mp4")); // no CanRelay
+        Assert.True(reply.UseBrowser);
+        Assert.Empty(m.All());
+    }
+
+    [Fact]
+    public async Task RelayInfo_TellsTheExtensionWhereTheRelayIs()
+    {
+        var (m, s) = Engine();
+        var on = await new HostMessageHandler(m, s, new NoPicker(), null, null, Relay).HandleAsync(new HostMessage("relayInfo", null, null, null, null, null, null, null));
+        Assert.Equal((true, 4321, "secret"), (on.Ok, on.RelayPort, on.RelayToken));
+        var off = await new HostMessageHandler(m, s, new NoPicker()).HandleAsync(new HostMessage("relayInfo", null, null, null, null, null, null, null));
+        Assert.False(off.Ok);
     }
 
     [Fact]

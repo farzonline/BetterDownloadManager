@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "description": "Sends downloads and detected video streams to Better Download Manager.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAl5FsZR7w2ciqLX6kuhduPJlKi+7gkF0z7sXUFolQPYiG71m0orp6hMPI9VsvTv9hIo0gw6VH9avxlv6Z90qcRUL7KTRVEnm1/6MybHntTScgInx/FgvlTEDgt/9tWs9yZjtJWQrd2NJZCBuBvodJLbFSNBI9D4WaKnLiBJwUb2TehlZrILfyfazl9AAKQe5kfbIOsBMAZAxdunZse4cnFL1MReLSj87WLXWBLoyDfblaOTeJAEtWMlor0yjJ9/sWGIklBMSUoOiMe7N/Zc+Ex5SYfbwGx5Bve+qehfmBFDqPhaL0xFNNEBzzHHhuAZPYHKD3AhFS0t5GPip7AJwTvwIDAQAB",
-  "minimum_chrome_version": "111",
+  "minimum_chrome_version": "116",
   "permissions": [
     "webRequest",
     "downloads",
@@ -14,7 +14,8 @@
     "scripting",
     "contextMenus",
     "cookies",
-    "notifications"
+    "notifications",
+    "offscreen"
   ],
   "optional_permissions": [
     "debugger"

@@ -19,6 +19,8 @@ public sealed class TestServer : IAsyncDisposable
     /// <summary>Advertise ranges but answer every request with 200 and the whole body.</summary>
     public bool IgnoreRange { get; set; }
     public bool RejectHead { get; set; }
+    /// <summary>GETs answer 204 No Content (what Chrome hands back for a request it turned into its own download).</summary>
+    public bool NoContentForGets { get; set; }
     public string? ETag { get; set; }
     public string? ContentDisposition { get; set; }
     public string ContentType { get; set; } = "application/octet-stream";
@@ -67,6 +69,7 @@ public sealed class TestServer : IAsyncDisposable
         lock (Authorizations) Authorizations.Add(auth);
         if (RequiredAuthorization != null && auth != RequiredAuthorization) { res.StatusCode = 401; return; }
         if (isHead && RejectHead) { res.StatusCode = 405; return; }
+        if (!isHead && NoContentForGets) { res.StatusCode = 204; return; }
         if (!isHead)
         {
             if (_expired) { res.StatusCode = 403; return; }

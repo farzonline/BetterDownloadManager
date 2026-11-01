@@ -35,6 +35,19 @@ public class SegmentedDownloaderTests
     }
 
     [Fact]
+    public async Task ANoContentAnswer_IsAnError_NotAnEmptyFinishedFile()
+    {
+        await using var s = TestServer.Start(500_000);
+        var dir = NewDir();
+        var (req, probe) = await Prep(s, dir); // the HEAD says 500 000 bytes
+        s.NoContentForGets = true;
+        var e = await Assert.ThrowsAsync<DownloadException>(() =>
+            new SegmentedDownloader(new HttpClient()).RunAsync(req, probe, new DownloadOptions(MaxRetries: 1, RetryBaseDelay: TimeSpan.FromMilliseconds(1)), null, default));
+        Assert.Contains("204", e.Message);
+        Assert.Empty(Directory.GetFiles(dir).Where(f => !f.Contains(".bdmpart")));
+    }
+
+    [Fact]
     public async Task Resume_AfterCancel_ContinuesAndIsByteIdentical()
     {
         await using var s = TestServer.Start(1_500_000);

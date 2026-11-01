@@ -29,6 +29,7 @@ public partial class App : Application
     HostMessageHandler? _handler;
     AppServices? _svc;
     RestApi? _api;
+    BrowserRelay? _relay;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -68,12 +69,25 @@ public partial class App : Application
         _connectivity = new ConnectivityWatcher();
         manager.Watch(_connectivity);
 
+        // Sites that only serve a real browser: BDM's engine sends those requests through the extension.
+        try
+        {
+            _relay = new BrowserRelay(RestApi.NewToken(), RestApi.FreePort(), TimeSpan.FromSeconds(30));
+            _relay.Start();
+            clients.Browser = new HttpClient(_relay.Handler) { Timeout = TimeSpan.FromMinutes(2) };
+        }
+        catch (Exception ex) when (ex is System.Net.HttpListenerException or IOException)
+        {
+            Log.Error("The browser relay could not start; protected sites fall back to the browser's own download", ex);
+            _relay = null;
+        }
         _handler = new HostMessageHandler(manager, settings, new QualityPickerService(), new DownloadPromptService(settings, clients),
             async req =>
             {
                 using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
                 return await BDM.Core.Http.Prober.ProbeAsync(clients.Get(manager.ProxyIdFor(req.Category, "main")), req, limit.Token);
-            });
+            },
+            _relay != null ? new RelayEndpoint(_relay.Port, _relay.Token) : null);
         _pipe = new PipeServer(PipeProtocol.PipeName, _handler.HandleAsync);
         _pipe.Start();
 
@@ -164,6 +178,7 @@ public partial class App : Application
         _pipe?.Dispose();
         if (_api != null) { _api.Dispose(); try { File.Delete(Path.Combine(AppSettings.DataDir, "api.json")); } catch (IOException) { } }
         _connectivity?.Dispose();
+        _relay?.Dispose();
         _store?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);

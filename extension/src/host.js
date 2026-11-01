@@ -59,6 +59,7 @@ export async function buildMessage(item, { cookies, askQuality = false, userAgen
     cookie,
     kind: stream ? item.kind : undefined,
     manifestBody: item.manifestBody,
+    canRelay: !stream || undefined, // this extension can fetch files for BDM when a site refuses it (src/relay.js)
   };
 }
 

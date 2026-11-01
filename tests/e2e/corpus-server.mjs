@@ -156,8 +156,12 @@ function gate(req, url) {
   return cookie && url.searchParams.get('sig') === 'ok' && exp > Date.now() / 1000;
 }
 
+/** A 5 MB file behind the bot check, big enough for BDM to fetch it in several parts at once. */
+export const PROTECTED_FILE = path.join(os.tmpdir(), 'bdm-corpus-protected.bin');
+
 export async function startCorpus() {
   ensureMedia();
+  if (!fs.existsSync(PROTECTED_FILE)) fs.writeFileSync(PROTECTED_FILE, crypto.randomBytes(5 * 1024 * 1024));
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
     const p = url.pathname;
@@ -181,6 +185,13 @@ export async function startCorpus() {
     if (p === '/media/ig/video.mp4' || p === '/media/ig/audio.mp4') {
       if (!gate(req, url)) { res.writeHead(403).end('forbidden'); return; }
       serveFile(req, res, path.join(MEDIA_DIR, p.replace('/media/', '')), 'video/mp4');
+      return;
+    }
+    if (p === '/protected/file.mp4') {
+      // Cloudflare-like bot protection: only a real browser gets the file. Chrome marks its own requests with
+      // Sec-Fetch-Mode; a download manager's HTTP client does not, and is refused even with a browser User-Agent.
+      if (!req.headers['sec-fetch-mode']) { res.writeHead(403).end('Just a moment...'); return; }
+      serveFile(req, res, PROTECTED_FILE, 'video/mp4');
       return;
     }
     const m = /^\/media\/(hls|hlsaes|dash|mse)\/([\w.-]+)$/.exec(p);

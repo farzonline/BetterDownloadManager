@@ -23,6 +23,8 @@ public static class AppLauncher
         return new(false, true);
     }
 
+    public static Task<bool> IsRunningAsync(string pipeName) => CanConnectAsync(pipeName, 300);
+
     static void DefaultStart(string exe) => Process.Start(new ProcessStartInfo(exe, "--background") { UseShellExecute = false });
 
     // Connect-and-leave probe: the app's pipe server must tolerate an empty connection.

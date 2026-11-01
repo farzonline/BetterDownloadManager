@@ -172,6 +172,18 @@ public class HostTests
     }
 
     [Fact]
+    public async Task Host_AskingWhereTheRelayIs_NeverLaunchesBdm()
+    {
+        // The extension asks whenever Chrome wakes it; that alone must not start the app.
+        var launches = 0;
+        var link = new PipeAppLink(UniquePipe(), "bdm.exe", TimeSpan.FromMilliseconds(100), _ => launches++);
+        var stdout = new MemoryStream();
+        await new HostRunner(link).RunAsync(Framed(new HostMessage("relayInfo", null, null, null, null, null, null, null)), stdout, default);
+        Assert.False(Assert.Single(await ReadReplies(stdout)).Ok);
+        Assert.Equal(0, launches);
+    }
+
+    [Fact]
     public async Task Host_GarbageInput_RepliesErrorAndKeepsRunning()
     {
         var ms = new MemoryStream();

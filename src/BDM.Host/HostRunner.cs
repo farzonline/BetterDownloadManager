@@ -16,7 +16,10 @@ public sealed class PipeAppLink(string pipeName, string appExe, TimeSpan startTi
 
     public async Task<HostReply> SendAsync(HostMessage msg, CancellationToken ct)
     {
-        var state = await AppLauncher.EnsureRunningAsync(pipeName, appExe, startTimeout, start);
+        // Asked whenever the browser wakes the extension: only answer if BDM is already running, never launch it for that.
+        var state = msg.Op == "relayInfo"
+            ? new LaunchResult(await AppLauncher.IsRunningAsync(pipeName), false)
+            : await AppLauncher.EnsureRunningAsync(pipeName, appExe, startTimeout, start);
         if (!state.Running)
             return new HostReply(false, "BDM is not running and could not be started. The browser will download this file itself.", state.Started);
         try

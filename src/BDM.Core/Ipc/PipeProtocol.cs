@@ -13,10 +13,15 @@ public record HostMessage(
     Dictionary<string, string>? Headers,
     string? Cookie,
     string? ManifestBody,
-    string? Kind);
+    string? Kind,
+    bool CanRelay = false);
 
-/// <param name="UseBrowser">The site refuses BDM (bot protection): the extension lets the browser download it instead.</param>
-public record HostReply(bool Ok, string? Error, bool AppStarted, bool UseBrowser = false);
+/// <param name="UseBrowser">The site refuses BDM (bot protection) and the extension can't relay: the browser downloads it instead.</param>
+/// <param name="RelayPort">Where the extension serves BDM's browser relay (with <paramref name="RelayToken"/>), when BDM needs it.</param>
+public record HostReply(bool Ok, string? Error, bool AppStarted, bool UseBrowser = false, int? RelayPort = null, string? RelayToken = null);
+
+/// <summary>Where the app's browser relay listens (see Net.BrowserRelay).</summary>
+public record RelayEndpoint(int Port, string Token);
 
 public static class PipeProtocol
 {

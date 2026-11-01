@@ -35,6 +35,17 @@ public class ProxyProviderTests
     }
 
     [Fact]
+    public void TheBrowserRoute_UsesTheRelayClient_AndIsOfferedAsAChoice()
+    {
+        var (p, _, _) = Make();
+        Assert.DoesNotContain(p.Choices(), c => c.Id == BrowserRelay.ProfileId); // no relay: nothing to offer
+        var relay = new HttpClient();
+        p.Browser = relay;
+        Assert.Same(relay, p.Get(BrowserRelay.ProfileId));
+        Assert.Contains(p.Choices(), c => c.Id == BrowserRelay.ProfileId);
+    }
+
+    [Fact]
     public void Get_ForADeletedProfile_Throws_InsteadOfSilentlyGoingDirect()
     {
         var (p, profiles, _) = Make();
