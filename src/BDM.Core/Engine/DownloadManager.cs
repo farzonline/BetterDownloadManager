@@ -15,6 +15,7 @@ public class DownloadManager
     readonly Dictionary<Guid, DownloadRecord> _records;
     readonly Dictionary<Guid, CancellationTokenSource> _running = new();
     readonly Dictionary<Guid, DateTime> _lastPersist = new();
+    readonly Dictionary<Guid, IReadOnlyList<Segment>> _segments = new();
 
     readonly HashSet<Guid> _windowStopped = new();
     readonly HashSet<string> _batchDone = new();
@@ -46,6 +47,9 @@ public class DownloadManager
     }
 
     public DownloadRecord? Get(Guid id) { lock (_gate) return _records.GetValueOrDefault(id); }
+
+    /// <summary>Live segment map of a running segmented download (for the progress window), else null.</summary>
+    public IReadOnlyList<Segment>? SegmentsFor(Guid id) { lock (_gate) return _segments.GetValueOrDefault(id); }
 
     public IReadOnlyList<DownloadRecord> All() { lock (_gate) return _records.Values.OrderBy(r => r.Added).ToList(); }
 
@@ -229,7 +233,11 @@ public class DownloadManager
             Update(id, r => r with { Total = probe.Length, FilePath = Path.Combine(r.Request.DestinationDir, probe.FileName) }, persist: true);
 
             var opts = BaseOptions with { Connections = q.Connections };
-            var progress = new SyncProgress(p => Update(id, r => r with { Downloaded = p.Downloaded, Total = p.Total ?? r.Total }, persist: false));
+            var progress = new SyncProgress(p =>
+            {
+                lock (_gate) { if (p.Segments.Count > 0) _segments[id] = p.Segments; }
+                Update(id, r => r with { Downloaded = p.Downloaded, Total = p.Total ?? r.Total }, persist: false);
+            });
             var result = await new SegmentedDownloader(http).RunAsync(rec.Request, probe, opts, progress, ct);
 
             if (rec.ExpectedSha256 is { } want &&
@@ -263,7 +271,7 @@ public class DownloadManager
         }
         finally
         {
-            lock (_gate) _running.Remove(id);
+            lock (_gate) { _running.Remove(id); _segments.Remove(id); }
             Pump(q.Id);
             CheckQueueFinished(q);
         }

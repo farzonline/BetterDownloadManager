@@ -1,0 +1,34 @@
+<Window x:Class="BDM.App.Views.ProgressDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Download" Width="560" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource Brush.Surface}" Foreground="{DynamicResource Brush.Text}"
+        FontFamily="{DynamicResource Font.Text}" FontSize="{DynamicResource FontSize.Body}">
+  <StackPanel Margin="24">
+    <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Title}" TextTrimming="CharacterEllipsis"/>
+    <TextBlock Text="{Binding StatusText}" Style="{StaticResource Text.Caption}" Margin="0,4,0,16" AutomationProperties.LiveSetting="Polite"/>
+    <ProgressBar Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}"/>
+    <Canvas x:Name="Segments" Height="10" Margin="0,12,0,0" ClipToBounds="True" ToolTip="Connections: each bar is one part of the file"/>
+    <Grid Margin="0,16,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="24"/><RowDefinition Height="24"/><RowDefinition Height="24"/><RowDefinition Height="24"/><RowDefinition Height="24"/>
+      </Grid.RowDefinitions>
+      <TextBlock Grid.Row="0" Text="Size" Style="{StaticResource Text.Caption}"/>
+      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SizeText}"/>
+      <TextBlock Grid.Row="1" Text="Speed" Style="{StaticResource Text.Caption}"/>
+      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SpeedText}"/>
+      <TextBlock Grid.Row="2" Text="Time left" Style="{StaticResource Text.Caption}"/>
+      <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding EtaText}"/>
+      <TextBlock Grid.Row="3" Text="Address" Style="{StaticResource Text.Caption}"/>
+      <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Url}" Style="{StaticResource Text.Mono}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}"/>
+      <TextBlock Grid.Row="4" Text="Save to" Style="{StaticResource Text.Caption}"/>
+      <TextBlock x:Name="SaveTo" Grid.Row="4" Grid.Column="1" Style="{StaticResource Text.Mono}" TextTrimming="CharacterEllipsis"/>
+    </Grid>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+      <Button x:Name="PauseResume" Content="Pause" Margin="0,0,8,0" Click="PauseResume_Click"/>
+      <Button Content="Close" IsCancel="True" IsDefault="True"/>
+    </StackPanel>
+  </StackPanel>
+</Window>

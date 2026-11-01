@@ -1,0 +1,175 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using BDM.App.Services;
+using BDM.App.Settings;
+using BDM.App.ViewModels;
+using BDM.Core.Data;
+using BDM.Core.Engine;
+
+namespace BDM.App.Views;
+
+public partial class MainWindow : Window
+{
+    readonly MainViewModel _vm;
+    readonly DownloadManager _manager;
+    readonly AppSettings _settings;
+    readonly HttpClient _http;
+    readonly Dictionary<Guid, DownloadState> _lastStates = new();
+
+    /// <summary>Raised on the UI thread when a download finishes (the app shows a tray notification if the window is hidden).</summary>
+    public event Action<string>? DownloadCompleted;
+
+    public MainWindow(MainViewModel vm, DownloadManager manager, AppSettings settings, HttpClient http)
+    {
+        InitializeComponent();
+        _vm = vm;
+        _manager = manager;
+        _settings = settings;
+        _http = http;
+        DataContext = vm;
+        Crest.Source = AppIcon.Image();
+        Icon = AppIcon.Image();
+        ThemeManager.Attach(this);
+
+        foreach (var r in manager.All()) _lastStates[r.Id] = r.State;
+        manager.Changed += r => Dispatcher.BeginInvoke(() => OnRecordChanged(r));
+        vm.AddUrlRequested += () => ShowAddDialog(null);
+        vm.RemoveRequested += ConfirmRemove;
+        Loaded += (_, _) => FitNameColumn();
+    }
+
+    // ---------------------------------------------------------------- add / remove
+
+    public void ShowAddDialog(string? initialUrl)
+    {
+        if (!IsVisible) { Show(); }
+        var dlg = new AddUrlDialog(_http, _settings, initialUrl) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        try
+        {
+            var id = _vm.AddUrl(dlg.Url);
+            if (!dlg.StartNow) _manager.Pause(id);
+        }
+        catch (ArgumentException e) { ShowBanner(e.Message, error: true); }
+    }
+
+    void ConfirmRemove()
+    {
+        var n = _vm.SelectedItems.Count;
+        if (n == 0) return;
+        var what = n == 1 ? $"“{_vm.SelectedItems[0].Name}”" : $"{n} downloads";
+        var (ok, alsoFiles) = ConfirmDialog.Ask(this, $"Remove {what}?", "They leave the list. Files you already downloaded stay on disk unless you choose otherwise.",
+            "Remove", destructive: true, optionLabel: "Also delete the downloaded files");
+        if (ok) _vm.RemoveSelected(alsoFiles);
+    }
+
+    // ---------------------------------------------------------------- banner (inline messages, never dialogs for success)
+
+    public void ShowBanner(string text, bool error = false, params (string Label, Action Act)[] actions)
+    {
+        var c = (Color)FindResource(error ? "Color.Danger" : "Color.AccentText");
+        Banner.Background = new SolidColorBrush(Color.FromArgb(31, c.R, c.G, c.B));      // state colour at ~12 %
+        Banner.BorderBrush = new SolidColorBrush(Color.FromArgb(89, c.R, c.G, c.B));     // border at ~35 %
+        BannerText.Text = text;
+        BannerText.ToolTip = text;
+        BannerActions.Children.Clear();
+        foreach (var (label, act) in actions)
+        {
+            var b = new Button { Content = label, MinHeight = 28, Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(12, 0, 12, 0) };
+            b.Click += (_, _) => { act(); Banner.Visibility = Visibility.Collapsed; };
+            BannerActions.Children.Add(b);
+        }
+        Banner.Visibility = Visibility.Visible;
+    }
+
+    void BannerClose_Click(object sender, RoutedEventArgs e) => Banner.Visibility = Visibility.Collapsed;
+
+    /// <summary>A link on the clipboard that looks like a file: offer it without stealing focus.</summary>
+    public void OfferClipboardUrl(Uri url) =>
+        ShowBanner($"Link copied: {Categories.NameFromUrl(url)}", error: false, ("Download", () => ShowAddDialog(url.ToString())));
+
+    void OnRecordChanged(DownloadRecord r)
+    {
+        var was = _lastStates.GetValueOrDefault(r.Id);
+        _lastStates[r.Id] = r.State;
+        if (r.State != DownloadState.Completed || was == DownloadState.Completed) return;
+        var name = r.FilePath != null ? Path.GetFileName(r.FilePath) : Categories.NameFromUrl(r.Request.Url);
+        DownloadCompleted?.Invoke(name);
+        if (!IsVisible) return;
+        var path = r.FilePath;
+        ShowBanner($"{name} is complete", false,
+            ("Open", () => { if (path != null) new ExplorerShell().Open(path); }),
+            ("Show in folder", () => { if (path != null) new ExplorerShell().ShowInFolder(path); }));
+    }
+
+    // ---------------------------------------------------------------- list
+
+    void List_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _vm.SetSelection(List.SelectedItems.OfType<DownloadItemViewModel>());
+
+    void List_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((e.OriginalSource as DependencyObject)?.FindAncestor<ListViewItem>() == null || List.SelectedItem is not DownloadItemViewModel item) return;
+        if (item.HasFile) _vm.OpenFileCommand.Execute(null);
+        else new ProgressDialog(_manager, item.Id) { Owner = this }.Show();
+    }
+
+    void CopyAddress_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedItems.Count > 0) Clipboard.SetText(string.Join(Environment.NewLine, _vm.SelectedItems.Select(i => i.Url)));
+    }
+
+    void List_SizeChanged(object sender, SizeChangedEventArgs e) => FitNameColumn();
+
+    /// <summary>The Name column takes the spare width; the others keep theirs.</summary>
+    void FitNameColumn()
+    {
+        if (List.View is not GridView gv) return;
+        var others = gv.Columns.Where(c => c != NameCol).Sum(c => c.ActualWidth > 0 ? c.ActualWidth : c.Width);
+        NameCol.Width = Math.Max(120, List.ActualWidth - others - 48);
+    }
+
+    // ---------------------------------------------------------------- keyboard + window chrome
+
+    void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var ctrl = Keyboard.Modifiers == ModifierKeys.Control;
+        if (ctrl && e.Key == Key.N) { _vm.AddUrlCommand.Execute(null); e.Handled = true; }
+        else if (ctrl && e.Key == Key.F) { SearchBox.Focus(); SearchBox.SelectAll(); e.Handled = true; }
+        else if (e.Key == Key.Delete && List.IsKeyboardFocusWithin) { _vm.RemoveCommand.Execute(null); e.Handled = true; }
+        else if (e.Key == Key.Escape && SearchBox.IsKeyboardFocused) { _vm.SearchText = ""; List.Focus(); e.Handled = true; }
+    }
+
+    void Min_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+    void Max_Click(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this); else SystemCommands.MaximizeWindow(this);
+    }
+    void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    void Window_StateChanged(object? sender, EventArgs e)
+    {
+        var max = WindowState == WindowState.Maximized;
+        MaxButton.Content = max ? "" : "";
+        MaxButton.ToolTip = max ? "Restore" : "Maximize";
+        // A maximized chrome window overhangs the work area by its resize border: pull it back in.
+        Root.Margin = max ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (_settings.MinimizeToTray && !App.IsExiting) { e.Cancel = true; Hide(); return; }
+        base.OnClosing(e);
+    }
+}
+
+static class VisualTreeExtensions
+{
+    public static T? FindAncestor<T>(this DependencyObject d) where T : DependencyObject
+    {
+        for (var p = d; p != null; p = VisualTreeHelper.GetParent(p) ?? LogicalTreeHelper.GetParent(p)) if (p is T t) return t;
+        return null;
+    }
+}

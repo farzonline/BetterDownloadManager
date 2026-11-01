@@ -97,4 +97,21 @@ public class DownloadManagerTests
         Assert.Equal(DownloadFailure.AuthExpired, r.Failure);
         Assert.True(File.Exists(Path.Combine(dir, "file.bdmpart")), "progress must be kept");
     }
+
+    [Fact]
+    public async Task Manager_SegmentsFor_ReportsLiveSegmentsWhileRunning_AndNothingAfter()
+    {
+        await using var s = TestServer.Start(600_000);
+        s.SlowFromOffset = 0; s.SlowDelayMs = 40;
+        var (m, _, dir) = Make(connections: 3);
+        var id = m.Add(Req(s, dir));
+        await WaitFor(m, id, r => r.State == DownloadState.Running && r.Downloaded > 0);
+        var live = m.SegmentsFor(id);
+        Assert.NotNull(live);
+        Assert.True(live!.Count >= 3);
+        Assert.Equal(600_000, live.Max(x => x.End) + 1);
+        await WaitFor(m, id, r => r.State == DownloadState.Completed);
+        Assert.Null(m.SegmentsFor(id));
+        Assert.Null(m.SegmentsFor(Guid.NewGuid()));
+    }
 }
