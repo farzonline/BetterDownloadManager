@@ -3,8 +3,10 @@ using BDM.App.Services;
 using BDM.App.Settings;
 using BDM.App.ViewModels;
 using BDM.App.Views;
+using BDM.Core.Api;
 using BDM.Core.Data;
 using BDM.Core.Engine;
+using BDM.Core.Ext;
 using BDM.Core.Ipc;
 using BDM.Core.Net;
 using BDM.Core.Streams;
@@ -25,6 +27,7 @@ public partial class App : Application
     MainWindow? _window;
     HostMessageHandler? _handler;
     AppServices? _svc;
+    RestApi? _api;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -53,6 +56,8 @@ public partial class App : Application
         {
             StreamsFor = c => new StreamDownloader(c, ffmpeg),
             Logins = logins,
+            YtDlp = new YtDlpRunner(() => FfmpegLocator.FindExe("yt-dlp", settings.YtDlpPath), null, () => FfmpegLocator.Find(settings.FfmpegPath)),
+            ProxyUrlFor = id => ProxyUrls.For(id, profiles, vault),
         };
         _connectivity = new ConnectivityWatcher();
         manager.Watch(_connectivity);
@@ -64,13 +69,14 @@ public partial class App : Application
         var vm = new MainViewModel(manager, settings, new ExplorerShell(), a => Dispatcher.BeginInvoke(a));
         _svc = new AppServices
         {
-            Settings = settings, Manager = manager, Store = _store, Profiles = profiles, Vault = vault, Logins = logins, Clients = clients, Main = vm,
+            Settings = settings, Manager = manager, Store = _store, Profiles = profiles, Vault = vault, Logins = logins, Clients = clients, Main = vm, Handler = _handler,
             ApplySettings = () => ApplySettings(settings, manager),
         };
         _window = new MainWindow(vm, _svc);
         MainWindow = _window;
         _handler.Activated += () => Dispatcher.BeginInvoke(ShowMainWindow);
         ApplySettings(settings, manager);
+        StartLocalApi(settings, manager, vm);
 
         _tray = new TrayHost(ShowMainWindow, () => Dispatcher.Invoke(() => _window.ShowAddDialog(null)), () => Dispatcher.Invoke(ToggleDropTarget), ExitApp);
         _window.DownloadCompleted += name => { if (!_window.IsVisible) _tray.Notify("Download complete", name); };
@@ -84,6 +90,23 @@ public partial class App : Application
 
         foreach (var arg in e.Args.Where(a => Uri.TryCreate(a, UriKind.Absolute, out var u) && u.Scheme is "http" or "https" or "ftp" or "ftps"))
             await _handler.HandleAsync(new HostMessage("add", arg, null, null, null, null, null, null));
+    }
+
+    /// <summary>The token-protected loopback API for the `bdm` tool; its port and token go to api.json in the data folder.</summary>
+    void StartLocalApi(AppSettings settings, DownloadManager manager, MainViewModel vm)
+    {
+        if (!settings.EnableLocalApi) return;
+        try
+        {
+            var token = RestApi.NewToken();
+            _api = new RestApi(manager, url => vm.AddUrl(url.ToString()), token, RestApi.FreePort());
+            _api.Start();
+            ApiInfo.Write(AppSettings.DataDir, _api.Port, token);
+        }
+        catch (Exception ex) when (ex is System.Net.HttpListenerException or IOException or UnauthorizedAccessException)
+        {
+            _api = null; // the app works without it; the bdm tool will say the app isn't reachable
+        }
     }
 
     /// <summary>Pushes the saved settings into the engine, the theme and the Windows startup entry.</summary>
@@ -127,6 +150,7 @@ public partial class App : Application
         _clipboard?.Dispose();
         _tray?.Dispose();
         _pipe?.Dispose();
+        if (_api != null) { _api.Dispose(); try { File.Delete(Path.Combine(AppSettings.DataDir, "api.json")); } catch (IOException) { } }
         _connectivity?.Dispose();
         _store?.Dispose();
         _instance?.Dispose();

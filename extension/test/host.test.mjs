@@ -56,3 +56,26 @@ test('cookie lookup failure still builds the message', async () => {
   const m = await buildMessage({ kind: 'video', url: 'https://cdn/v.mp4', headers: {} }, { cookies: bad });
   assert.equal(m.cookie, undefined);
 });
+
+import { buildPageMessage } from '../src/host.js';
+
+test('buildPageMessage asks the app to fetch the tab page with yt-dlp, with the tab cookies', async () => {
+  const m = await buildPageMessage({ url: 'https://cdn/watch?v=1', title: 'My page' }, { cookies });
+  assert.equal(m.op, 'addPageAsk');
+  assert.equal(m.url, 'https://cdn/watch?v=1');
+  assert.equal(m.title, 'My page');
+  assert.equal(m.cookie, 'sid=1; k=v w');
+  assert.equal(m.headers.Referer, 'https://cdn/watch?v=1');
+});
+
+test('buildPageMessage refuses browser-internal and non-web tabs', async () => {
+  await assert.rejects(buildPageMessage({ url: 'chrome://extensions' }, { cookies }), /web page/i);
+  await assert.rejects(buildPageMessage({ url: undefined }, { cookies }), /web page/i);
+  await assert.rejects(buildPageMessage({ url: 'file:///c:/a.html' }, { cookies }), /web page/i);
+});
+
+test('buildPageMessage still works when cookies cannot be read', async () => {
+  const bad = { getAll: async () => { throw new Error('denied'); } };
+  const m = await buildPageMessage({ url: 'https://cdn/watch', title: 't' }, { cookies: bad });
+  assert.equal(m.cookie, undefined);
+});

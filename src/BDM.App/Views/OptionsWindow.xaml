@@ -18,6 +18,7 @@
         <CheckBox Content="Offer links I copy" IsChecked="{Binding WatchClipboard}" Margin="0,8,0,0"/>
         <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" Margin="0,8,0,0"/>
         <CheckBox Content="Ask which quality to download for streams" IsChecked="{Binding AlwaysAskQuality}" Margin="0,8,0,0"/>
+        <CheckBox Content="Allow the bdm command-line tool (takes effect after a restart)" IsChecked="{Binding EnableLocalApi}" Margin="0,8,0,0"/>
 
         <TextBlock Text="DOWNLOADS" Style="{StaticResource Text.Section}" Margin="0,28,0,8"/>
         <TextBlock Text="Save to" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/>

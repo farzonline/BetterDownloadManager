@@ -32,6 +32,7 @@ public sealed class OptionsViewModel : ObservableObject
         MinimizeToTray = s.MinimizeToTray;
         WatchClipboard = s.WatchClipboard;
         StartWithWindows = s.StartWithWindows;
+        EnableLocalApi = s.EnableLocalApi;
         GlobalProxyId = s.GlobalProxyId;
         CategoryFolders = new(s.CategoryFolders);
         CategoryProxies = new(s.CategoryProxies);
@@ -48,6 +49,7 @@ public sealed class OptionsViewModel : ObservableObject
     public bool MinimizeToTray { get; set; }
     public bool WatchClipboard { get; set; }
     public bool StartWithWindows { get; set; }
+    public bool EnableLocalApi { get; set; }
     public string? GlobalProxyId { get; set; }
     public Dictionary<string, string> CategoryFolders { get; }
     public Dictionary<string, string> CategoryProxies { get; }
@@ -69,6 +71,7 @@ public sealed class OptionsViewModel : ObservableObject
         _settings.MinimizeToTray = MinimizeToTray;
         _settings.WatchClipboard = WatchClipboard;
         _settings.StartWithWindows = StartWithWindows;
+        _settings.EnableLocalApi = EnableLocalApi;
         _settings.GlobalProxyId = string.IsNullOrWhiteSpace(GlobalProxyId) ? null : GlobalProxyId;
         _settings.CategoryFolders = CategoryFolders.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value.Trim());
         _settings.CategoryProxies = CategoryProxies.Where(kv => !string.IsNullOrWhiteSpace(kv.Value)).ToDictionary(kv => kv.Key, kv => kv.Value);

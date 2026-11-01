@@ -69,3 +69,16 @@ if (host) {
   take.onchange = () => siteSettings.set(host, { takeover: take.checked });
   deepBox.append(label, label2);
 }
+
+// ---- pages the other layers cannot read (YouTube-style sites): hand the whole page to yt-dlp ----
+const pageBox = document.getElementById('page');
+if (/^https?:/i.test(tab.url ?? '')) {
+  const button = Object.assign(document.createElement('button'), { textContent: 'Download this page with yt-dlp' });
+  const note = Object.assign(document.createElement('span'), { className: 'status' });
+  button.onclick = async () => {
+    note.textContent = 'Sending…';
+    const r = await chrome.runtime.sendMessage({ type: 'download-page', tabId: tab.id });
+    note.textContent = r?.ok ? 'Sent to BDM' : (r?.error ?? 'Failed');
+  };
+  pageBox.append(button, note);
+}

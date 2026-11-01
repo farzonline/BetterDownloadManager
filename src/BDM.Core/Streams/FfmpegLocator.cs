@@ -17,7 +17,8 @@ public sealed class FfmpegLocator(string? configuredPath = null, Func<string?, s
         return sibling != null && File.Exists(sibling) ? sibling : FindExe("ffprobe", null);
     }
 
-    static string? FindExe(string name, string? configured)
+    /// <summary>The configured path if it exists, else next to the app, else the first match on PATH.</summary>
+    public static string? FindExe(string name, string? configured)
     {
         if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
         var beside = Path.Combine(AppContext.BaseDirectory, name + ".exe");

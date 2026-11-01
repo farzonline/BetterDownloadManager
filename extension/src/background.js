@@ -1,7 +1,7 @@
 import { createRegistry } from './detect/registry.js';
 import { createNetworkDetector } from './detect/network.js';
 import { DEFAULT_SETTINGS, takeOverDownload } from './takeover.js';
-import { buildMessage, sendToHost } from './host.js';
+import { buildMessage, buildPageMessage, sendToHost } from './host.js';
 import { handlePageMessage, pickBest } from './detect/page.js';
 import { createSiteSettings, hostKey, withSiteOverrides } from './siteSettings.js';
 import { createDebuggerFallback } from './detect/debugger-fallback.js';
@@ -109,6 +109,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     }
     if (msg.type === 'list') return { items: registry.list(msg.tabId) };
     if (msg.type === 'debug-registry') return registry.snapshot(); // used by the acceptance tests
+    if (msg.type === 'download-page') {
+      try { return await sendToHost(await buildPageMessage(await chrome.tabs.get(msg.tabId), { cookies: chrome.cookies })); }
+      catch (e) { return { ok: false, error: String(e.message ?? e) }; }
+    }
     if (msg.type === 'download') {
       const item = registry.get(msg.tabId, msg.itemId);
       if (!item) return { ok: false, error: 'That item is no longer available.' };

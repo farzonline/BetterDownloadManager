@@ -19,6 +19,8 @@ public class AppSettings
     public bool MinimizeToTray { get; set; } = true;
     public bool WatchClipboard { get; set; } = true;
     public bool StartWithWindows { get; set; }
+    /// <summary>Lets the `bdm` command-line tool and scripts control the app through a token-protected loopback API (needs a restart).</summary>
+    public bool EnableLocalApi { get; set; } = true;
     /// <summary>Connections per download for the main queue (1-32).</summary>
     public int Connections { get; set; } = 8;
     /// <summary>Total download speed limit in KB/s; 0 = unlimited.</summary>

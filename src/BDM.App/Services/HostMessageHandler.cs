@@ -1,5 +1,6 @@
 using BDM.App.Settings;
 using BDM.Core.Engine;
+using BDM.Core.Ext;
 using BDM.Core.Http;
 using BDM.Core.Ipc;
 using BDM.Core.Streams;
@@ -29,6 +30,8 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
             case "add": return Add(msg);
             case "addStream":
             case "addStreamAsk": return await AddStreamAsync(msg, ask: msg.Op == "addStreamAsk" || settings.AlwaysAskQuality);
+            case "addPage":
+            case "addPageAsk": return await AddPageAsync(msg, ask: msg.Op == "addPageAsk" || settings.AlwaysAskQuality);
             default: return Fail($"Unknown request '{msg.Op}'.");
         }
     }
@@ -75,6 +78,30 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
             choice = picked;
         }
         manager.AddStream(source, choice, Categories.FolderFor(settings, "Video"));
+        return Ok();
+    }
+
+    /// <summary>A video page (not a direct file or manifest): let yt-dlp work out what to download.</summary>
+    async Task<HostReply> AddPageAsync(HostMessage msg, bool ask)
+    {
+        if (!Uri.TryCreate(msg.Url, UriKind.Absolute, out var url) || url.Scheme is not ("http" or "https")) return Fail("That is not a web page address.");
+        if (manager.YtDlp is not { } yt) return Fail("yt-dlp isn't set up. Download yt-dlp.exe and set its path in Options > Tools.");
+
+        var headers = new Dictionary<string, string>(msg.Headers ?? new());
+        if (!string.IsNullOrEmpty(msg.Cookie)) headers["Cookie"] = msg.Cookie;
+        var proxyUrl = manager.ProxyUrlFor?.Invoke(manager.ProxyIdFor("Video", "main"));
+        YtDlpInfo info;
+        try { info = await yt.InfoAsync(url, headers, default, proxyUrl); }
+        catch (Exception e) when (e is YtDlpException or YtDlpMissingException) { return Fail(e.Message); }
+
+        var choice = info.Choices[0]; // best first
+        if (ask && info.Choices.Count > 1)
+        {
+            var picked = await picker.PickAsync(info.Choices, string.IsNullOrWhiteSpace(info.Title) ? msg.Title ?? url.Host : info.Title);
+            if (picked == null) return Fail("Cancelled: no quality was chosen.");
+            choice = picked;
+        }
+        manager.AddYtDlp(url, choice, Categories.FolderFor(settings, "Video"), msg.Headers, msg.Cookie);
         return Ok();
     }
 }

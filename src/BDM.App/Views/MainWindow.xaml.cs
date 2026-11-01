@@ -42,13 +42,19 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------------- add / remove
 
-    public void ShowAddDialog(string? initialUrl)
+    public async void ShowAddDialog(string? initialUrl)
     {
         if (!IsVisible) { Show(); }
         var dlg = new AddUrlDialog(_svc.Clients.Get(null), _settings, initialUrl, _svc.Clients.Choices("Use the default")) { Owner = this };
         if (dlg.ShowDialog() != true) return;
         try
         {
+            if (dlg.UseYtDlp)
+            {
+                var reply = await _svc.Handler.HandleAsync(new BDM.Core.Ipc.HostMessage("addPageAsk", dlg.Url, null, null, null, null, null, null));
+                if (!reply.Ok) ShowBanner(reply.Error ?? "yt-dlp couldn't use that page.", error: true);
+                return;
+            }
             var id = _vm.AddUrl(dlg.Url, dlg.ProxyProfileId);
             if (!dlg.StartNow) _manager.Pause(id);
         }

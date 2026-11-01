@@ -40,3 +40,16 @@ export async function buildMessage(item, { cookies, askQuality = false } = {}) {
     manifestBody: item.manifestBody,
   };
 }
+
+/** Message asking the app to download the video on a web page with yt-dlp (the app shows its quality chooser). */
+export async function buildPageMessage(tab, { cookies } = {}) {
+  if (!/^https?:\/\//i.test(tab?.url ?? '')) throw new Error('This tab is not a web page.');
+  let cookie;
+  if (cookies) {
+    try {
+      const jar = await cookies.getAll({ url: tab.url });
+      if (jar.length) cookie = jar.map((c) => `${c.name}=${c.value}`).join('; ');
+    } catch { /* send without cookies */ }
+  }
+  return { op: 'addPageAsk', url: tab.url, pageUrl: tab.url, title: tab.title, headers: { Referer: tab.url }, cookie };
+}

@@ -17,6 +17,8 @@ public partial class AddUrlDialog : Window
 
     public string Url => UrlBox.Text.Trim();
     public bool StartNow { get; private set; }
+    /// <summary>The address is a web page whose video yt-dlp should find, not a file.</summary>
+    public bool UseYtDlp => PageBox.IsChecked == true;
     /// <summary>"" = use the queue/default routing.</summary>
     public string ProxyProfileId => ProxyBox.SelectedValue as string ?? "";
 

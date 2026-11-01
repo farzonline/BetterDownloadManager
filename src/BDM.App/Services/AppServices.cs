@@ -56,6 +56,7 @@ public sealed class AppServices
     public required SiteLogins Logins { get; init; }
     public required ProxyClientProvider Clients { get; init; }
     public required MainViewModel Main { get; init; }
+    public required HostMessageHandler Handler { get; init; }
     /// <summary>Re-applies settings to the engine, theme and Windows startup entry (after Options or an import).</summary>
     public required Action ApplySettings { get; init; }
 }

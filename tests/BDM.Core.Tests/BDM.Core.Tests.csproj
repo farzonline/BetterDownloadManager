@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BDM.Core\BDM.Core.csproj" />
+    <ProjectReference Include="..\..\src\BDM.Cli\BDM.Cli.csproj" />
   </ItemGroup>
 
 </Project>

@@ -127,4 +127,25 @@ public class NetSupportTests
         Assert.Null(res.ExitCode);
         Assert.Contains("nope.exe", res.Error);
     }
+
+    [Fact]
+    public void ProxyUrls_BuildsAUrlYtDlpUnderstands_WithEscapedCredentials()
+    {
+        var dir = Tmp();
+        var vault = new CredentialVault(Path.Combine(dir, "v.json"));
+        var store = new ProxyProfileStore(Path.Combine(dir, "p.json"));
+        var socks = new ProxyProfile("s1", "NYC", ProxyKind.Socks5, "nyc.example.com", 1080, "svc@user");
+        var http = new ProxyProfile("h1", "Web", ProxyKind.Http, "proxy.example.com", 8080, null);
+        var https = new ProxyProfile("h2", "Secure", ProxyKind.Http, "secure.example.com", 443, "u");
+        store.Save(new[] { socks, http, https });
+        vault.Save(socks.VaultKey, "p:w/d");
+        vault.Save(https.VaultKey, "pw");
+
+        Assert.Equal("socks5h://svc%40user:p%3Aw%2Fd@nyc.example.com:1080", ProxyUrls.For("s1", store, vault));
+        Assert.Equal("http://proxy.example.com:8080", ProxyUrls.For("h1", store, vault));
+        Assert.Equal("https://u:pw@secure.example.com:443", ProxyUrls.For("h2", store, vault));
+        Assert.Null(ProxyUrls.For(null, store, vault));
+        Assert.Null(ProxyUrls.For("", store, vault));
+        Assert.Null(ProxyUrls.For("deleted-profile", store, vault));
+    }
 }
