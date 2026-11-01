@@ -26,3 +26,18 @@ public record DownloadRecord(
     StreamSource? Stream = null,
     StreamChoice? StreamChoice = null,
     string? YtDlpFormat = null);
+
+/// <summary>Session secrets (cookies, Authorization) are only needed while a download can still be retried.</summary>
+public static class RecordSecrets
+{
+    static readonly string[] SecretHeaders = ["Authorization", "Cookie", "Proxy-Authorization"];
+
+    static Dictionary<string, string> Strip(IEnumerable<KeyValuePair<string, string>> headers) =>
+        headers.Where(h => !SecretHeaders.Contains(h.Key, StringComparer.OrdinalIgnoreCase)).ToDictionary(h => h.Key, h => h.Value);
+
+    public static DownloadRecord WithoutSecrets(this DownloadRecord r) => r with
+    {
+        Request = r.Request with { CookieHeader = null, Headers = Strip(r.Request.Headers) },
+        Stream = r.Stream == null ? null : r.Stream with { CookieHeader = null, Headers = Strip(r.Stream.Headers) },
+    };
+}

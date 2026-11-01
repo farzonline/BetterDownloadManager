@@ -10,7 +10,7 @@ namespace BDM.Core.Ftp;
 /// <summary>FTP/FTPS download with resume (REST) into a .bdmpart file, then rename.</summary>
 public sealed class FtpDownloader
 {
-    public async Task<DownloadResult> RunAsync(DownloadRequest r, IProgress<DownloadProgress>? progress, CancellationToken ct)
+    public async Task<DownloadResult> RunAsync(DownloadRequest r, IProgress<DownloadProgress>? progress, CancellationToken ct, string? partKey = null)
     {
         var u = r.Url;
         var cred = u.UserInfo.Length > 0
@@ -19,7 +19,7 @@ public sealed class FtpDownloader
         var remote = Uri.UnescapeDataString(u.AbsolutePath);
         var name = FileNaming.Sanitize(r.FileName ?? Path.GetFileName(remote));
         Directory.CreateDirectory(r.DestinationDir);
-        var part = Path.Combine(r.DestinationDir, name + ".bdmpart");
+        var part = Path.Combine(r.DestinationDir, name + (partKey == null ? "" : "." + partKey) + ".bdmpart");
 
         var secure = u.Scheme == "ftps";
         var port = u.Port > 0 ? u.Port : secure ? 990 : 21;
@@ -40,8 +40,7 @@ public sealed class FtpDownloader
             throw new DownloadException(DownloadFailure.Network, "FTP error: " + e.Message, e);
         }
 
-        var final = Path.Combine(r.DestinationDir, FileNaming.Unique(r.DestinationDir, name));
-        File.Move(part, final);
+        var final = FileNaming.MoveUnique(part, r.DestinationDir, name);
         return new DownloadResult(final, new FileInfo(final).Length);
     }
 }

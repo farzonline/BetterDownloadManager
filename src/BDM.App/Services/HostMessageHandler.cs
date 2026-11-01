@@ -89,10 +89,13 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
 
         var headers = new Dictionary<string, string>(msg.Headers ?? new());
         if (!string.IsNullOrEmpty(msg.Cookie)) headers["Cookie"] = msg.Cookie;
-        var proxyUrl = manager.ProxyUrlFor?.Invoke(manager.ProxyIdFor("Video", "main"));
         YtDlpInfo info;
-        try { info = await yt.InfoAsync(url, headers, default, proxyUrl); }
-        catch (Exception e) when (e is YtDlpException or YtDlpMissingException) { return Fail(e.Message); }
+        try
+        {
+            var proxyUrl = manager.ProxyUrlFor?.Invoke(manager.ProxyIdFor("Video", "main"));
+            info = await yt.InfoAsync(url, headers, default, proxyUrl);
+        }
+        catch (Exception e) when (e is YtDlpException or YtDlpMissingException or InvalidOperationException) { return Fail(e.Message); }
 
         var choice = info.Choices[0]; // best first
         if (ask && info.Choices.Count > 1)

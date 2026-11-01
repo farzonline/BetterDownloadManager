@@ -95,7 +95,7 @@ public class DownloadManagerTests
         var id = m.Add(Req(s, dir));
         var r = await WaitFor(m, id, x => x.State == DownloadState.Failed);
         Assert.Equal(DownloadFailure.AuthExpired, r.Failure);
-        Assert.True(File.Exists(Path.Combine(dir, "file.bdmpart")), "progress must be kept");
+        Assert.NotEmpty(Directory.GetFiles(dir, "file.*.bdmpart")); // progress must be kept (the part file is keyed by download id)
     }
 
     [Fact]

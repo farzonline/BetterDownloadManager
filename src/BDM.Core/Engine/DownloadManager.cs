@@ -70,8 +70,35 @@ public class DownloadManager
 
     public IReadOnlyList<DownloadRecord> All() { lock (_gate) return _records.Values.OrderBy(r => r.Added).ToList(); }
 
+    /// <summary>Short per-download tag in the .bdmpart names, so same-named downloads in one folder never share partial data.</summary>
+    static string PartKey(Guid id) => id.ToString("N")[..8];
+
+    /// <summary>
+    /// A fresh link for a download that failed because its link expired continues that download (keeping the bytes it has)
+    /// instead of starting a duplicate from zero. Matches on the same file in the same folder, ignoring signature parameters.
+    /// </summary>
+    Guid? TryReattach(DownloadRequest request, StreamSource? stream, StreamChoice? choice)
+    {
+        DownloadRecord updated;
+        lock (_gate)
+        {
+            var key = UrlKey.Normalize(request.Url);
+            var prior = _records.Values.FirstOrDefault(x => x is { State: DownloadState.Failed, Failure: DownloadFailure.AuthExpired, YtDlpFormat: null }
+                && (x.Stream != null) == (stream != null)
+                && x.Request.DestinationDir == request.DestinationDir && UrlKey.Normalize(x.Request.Url) == key);
+            if (prior == null) return null;
+            updated = prior with { Request = request, Stream = stream ?? prior.Stream, StreamChoice = choice ?? prior.StreamChoice, State = DownloadState.Queued, Error = null, Failure = null };
+            _records[prior.Id] = updated;
+        }
+        _store.Upsert(updated);
+        Changed?.Invoke(updated);
+        Pump(updated.QueueId);
+        return updated.Id;
+    }
+
     public Guid Add(DownloadRequest request, string queueId = "main", string? expectedSha256 = null)
     {
+        if (TryReattach(request, null, null) is { } existing) return existing;
         DownloadRecord rec;
         lock (_gate)
         {
@@ -91,6 +118,7 @@ public class DownloadManager
     {
         var request = new DownloadRequest(source.ManifestUrl, null, source.Headers.GetValueOrDefault("Referer"),
             source.Headers.Where(h => h.Key != "Referer").ToDictionary(h => h.Key, h => h.Value), source.CookieHeader, null, null, destinationDir);
+        if (TryReattach(request, source, choice) is { } existing) return existing;
         DownloadRecord rec;
         lock (_gate)
         {
@@ -162,7 +190,7 @@ public class DownloadManager
         _ = Task.Run(async () =>
         {
             try { if (Get(id) is { } rec) await hook(rec); }
-            catch (Exception) { /* a failing scanner must not affect the download */ }
+            catch (Exception e) { Log.Error("A completion hook failed", e); } // a failing scanner must not affect the download
         });
     }
 
@@ -197,9 +225,33 @@ public class DownloadManager
         }
         cts?.Cancel();
         _store.Delete(id);
-        if (deleteFile && r.FilePath != null)
-            foreach (var p in new[] { r.FilePath, r.FilePath + ".bdmpart", r.FilePath + ".bdmpart.json" })
-                try { File.Delete(p); } catch (IOException) { }
+        if (!deleteFile) return;
+
+        // FilePath of an unfinished download is only the name it is expected to get; a file with that name may belong to someone else.
+        if (r.State == DownloadState.Completed && r.FilePath != null) TryDelete(r.FilePath);
+        DeletePartFiles(r.Request.DestinationDir, PartKey(id));
+        if (cts == null) return;
+        // The cancelled run is still unwinding and may write its sidecar once more: clean up again when it has stopped.
+        _ = Task.Run(async () =>
+        {
+            for (var i = 0; i < 100; i++)
+            {
+                lock (_gate) if (!_running.ContainsKey(id)) break;
+                await Task.Delay(100);
+            }
+            DeletePartFiles(r.Request.DestinationDir, PartKey(id));
+        });
+    }
+
+    static void TryDelete(string path)
+    {
+        try { File.Delete(path); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Error("Could not delete " + path, e); }
+    }
+
+    static void DeletePartFiles(string dir, string key)
+    {
+        if (!Directory.Exists(dir)) return;
+        foreach (var p in Directory.GetFiles(dir, $"*.{key}.bdmpart*")) TryDelete(p);
     }
 
     /// <summary>Re-queues downloads that failed for network reasons (called when connectivity returns).</summary>
@@ -242,24 +294,29 @@ public class DownloadManager
     {
         var q = _store.Queue(queueId) ?? QueueDefinition.Main;
         if (!Scheduler.IsWindowOpen(q, Clock())) return;
-        var toStart = new List<DownloadRecord>();
+        var toStart = new List<(DownloadRecord Rec, CancellationTokenSource Cts)>();
         lock (_gate)
         {
             var running = _records.Values.Count(r => r.QueueId == queueId && r.State == DownloadState.Running);
-            foreach (var next in _records.Values.Where(r => r.QueueId == queueId && r.State == DownloadState.Queued).OrderBy(r => r.Added))
+            // A paused-then-resumed download is Queued again while its cancelled run is still unwinding: wait for that run to end
+            // (its finally pumps again) rather than start a second one on the same files.
+            foreach (var next in _records.Values.Where(r => r.QueueId == queueId && r.State == DownloadState.Queued && !_running.ContainsKey(r.Id)).OrderBy(r => r.Added))
             {
                 if (running >= q.MaxConcurrent) break;
                 var started = next with { State = DownloadState.Running };
                 _records[next.Id] = started;
-                toStart.Add(started);
+                // Registered here, in the same step as the state change, so Pause() always finds the token to cancel.
+                var cts = new CancellationTokenSource();
+                _running[next.Id] = cts;
+                toStart.Add((started, cts));
                 running++;
             }
         }
-        foreach (var r in toStart)
+        foreach (var (r, cts) in toStart)
         {
             _store.Upsert(r);
             Changed?.Invoke(r);
-            _ = Task.Run(() => RunAsync(r.Id, q));
+            _ = Task.Run(() => RunAsync(r.Id, q, cts));
         }
     }
 
@@ -291,10 +348,30 @@ public class DownloadManager
         public void Report(DownloadProgress v) => on(v);
     }
 
-    async Task RunAsync(Guid id, QueueDefinition q)
+    /// <summary>Shared finish for every kind of download: Mark-of-the-Web, batch flag, Completed state without session secrets.</summary>
+    void Complete(Guid id, QueueDefinition q, string path, long bytes)
     {
-        using var cts = new CancellationTokenSource();
-        lock (_gate) _running[id] = cts;
+        if (Get(id) is { } rec) ZoneIdentifier.Mark(path, rec.Request.Url, rec.Request.Referer);
+        // Mark the batch BEFORE the state flips: a sibling's finish-check must never see this download as
+        // done without also seeing the flag, or the post-action could fire twice.
+        lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = path; }
+        Update(id, r => (r with { State = DownloadState.Completed, Downloaded = bytes, Total = bytes, FilePath = path, Error = null }).WithoutSecrets(), persist: true);
+        FireCompleted(id);
+    }
+
+    void Fail(Guid id, DownloadFailure kind, Exception e)
+    {
+        Log.Error($"Download {id} failed ({kind})", e);
+        Update(id, r => r.State == DownloadState.Running ? r with { State = DownloadState.Failed, Failure = kind, Error = e.Message } : r, persist: true);
+    }
+
+    static bool IsDiskFull(IOException e) => e.HResult is unchecked((int)0x80070070) or unchecked((int)0x80070027);
+
+    // yt-dlp reports a dropped connection and a bad URL the same way (exit 1 + an ERROR line): only the first is worth retrying.
+    static readonly System.Text.RegularExpressions.Regex NetworkWords = new("timed out|connection|network|unreachable|temporary failure|name resolution|unable to download", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    async Task RunAsync(Guid id, QueueDefinition q, CancellationTokenSource cts)
+    {
         var ct = cts.Token;
         try
         {
@@ -308,10 +385,7 @@ public class DownloadManager
                 var proxyUrl = ProxyUrlFor?.Invoke(ProxyIdFor(rec.Request.Category ?? "Video", q.Id, rec.Request.ProxyProfileId));
                 var file = await yt.DownloadAsync(rec.Request.Url, rec.YtDlpFormat, rec.Request.DestinationDir, headers,
                     new SyncProgress(p => Update(id, r => r with { Downloaded = p.Downloaded, Total = p.Total ?? r.Total }, persist: false)), ct, proxyUrl);
-                var size = new FileInfo(file).Length;
-                lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = file; } // before the state flips, see above
-                Update(id, r => r with { State = DownloadState.Completed, Downloaded = size, Total = size, FilePath = file, Error = null }, persist: true);
-                FireCompleted(id);
+                Complete(id, q, file, new FileInfo(file).Length);
                 return;
             }
             if (rec.Stream != null)
@@ -320,12 +394,7 @@ public class DownloadManager
                     ?? throw new InvalidOperationException("Stream downloads are not configured.");
                 var path = await streams.DownloadAsync(rec.Stream, rec.StreamChoice!, rec.Request.DestinationDir,
                     new SyncProgress(p => Update(id, r => r with { Downloaded = p.Downloaded }, persist: false)), ct, StreamOptions);
-                var length = new FileInfo(path).Length;
-                // Mark the batch BEFORE the state flips: a sibling's finish-check must never see this download as
-                // done without also seeing the flag, or the post-action could fire twice.
-                lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = path; }
-                Update(id, r => r with { State = DownloadState.Completed, Downloaded = length, Total = length, FilePath = path, Error = null }, persist: true);
-                FireCompleted(id);
+                Complete(id, q, path, new FileInfo(path).Length);
                 return;
             }
             var req = WithLogin(rec.Request);
@@ -338,14 +407,14 @@ public class DownloadManager
             DownloadResult result;
             if (req.Url.Scheme is "ftp" or "ftps")
             {
-                result = await new FtpDownloader().RunAsync(req, progress, ct);
+                result = await new FtpDownloader().RunAsync(req, progress, ct, PartKey(id));
             }
             else
             {
                 var probe = await Prober.ProbeAsync(http, req, ct);
                 Update(id, r => r with { Total = probe.Length, FilePath = Path.Combine(r.Request.DestinationDir, probe.FileName) }, persist: true);
                 var opts = BaseOptions with { Connections = q.Connections };
-                result = await new SegmentedDownloader(http, GlobalLimiter).RunAsync(req, probe, opts, progress, ct);
+                result = await new SegmentedDownloader(http, GlobalLimiter).RunAsync(req, probe, opts, progress, ct, PartKey(id));
             }
 
             if (rec.ExpectedSha256 is { } want &&
@@ -354,9 +423,7 @@ public class DownloadManager
                 Update(id, r => r with { State = DownloadState.Failed, Failure = DownloadFailure.ServerChanged, Error = "Checksum mismatch: the file does not match the expected SHA-256.", FilePath = result.Path }, persist: true);
                 return;
             }
-            lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = result.Path; } // before the state flips, see above
-            Update(id, r => r with { State = DownloadState.Completed, Downloaded = result.Bytes, Total = result.Bytes, FilePath = result.Path, Error = null }, persist: true);
-            FireCompleted(id);
+            Complete(id, q, result.Path, result.Bytes);
         }
         catch (OperationCanceledException)
         {
@@ -366,18 +433,13 @@ public class DownloadManager
             lock (_gate) windowStop = _windowStopped.Remove(id);
             Update(id, r => r.State == DownloadState.Running ? r with { State = windowStop ? DownloadState.Queued : DownloadState.Paused } : r, persist: true);
         }
-        catch (ProtectedContentException e)
-        {
-            Update(id, r => r with { State = DownloadState.Failed, Failure = DownloadFailure.Protected, Error = e.Message }, persist: true);
-        }
-        catch (DownloadException e)
-        {
-            Update(id, r => r with { State = DownloadState.Failed, Failure = e.Kind, Error = e.Message }, persist: true);
-        }
-        catch (Exception e)
-        {
-            Update(id, r => r with { State = DownloadState.Failed, Failure = DownloadFailure.Network, Error = e.Message }, persist: true);
-        }
+        catch (ProtectedContentException e) { Fail(id, DownloadFailure.Protected, e); }
+        catch (DownloadException e) { Fail(id, e.Kind, e); }
+        catch (IOException e) { Fail(id, IsDiskFull(e) ? DownloadFailure.DiskFull : DownloadFailure.Other, e); }
+        catch (HttpRequestException e) { Fail(id, DownloadFailure.Network, e); }
+        // Only genuine network trouble is retried when the connection returns; a bad URL, a missing tool or a deleted proxy needs the owner.
+        catch (YtDlpException e) { Fail(id, NetworkWords.IsMatch(e.Message) ? DownloadFailure.Network : DownloadFailure.Other, e); }
+        catch (Exception e) { Fail(id, DownloadFailure.Other, e); }
         finally
         {
             lock (_gate) { _running.Remove(id); _segments.Remove(id); }

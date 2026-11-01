@@ -170,4 +170,14 @@ public class SegmentedDownloaderTests
             .RunAsync(req, probe, new DownloadOptions(Connections: 4, SpeedLimitBytesPerSec: 250_000), null, default);
         Assert.True(sw.Elapsed.TotalSeconds >= 1.5, $"took {sw.Elapsed.TotalSeconds:F2}s");
     }
+
+    [Fact]
+    public async Task ProgressCallbackThatThrows_DoesNotFailAFinishedDownload()
+    {
+        await using var s = TestServer.Start(400_000);
+        var (req, probe) = await Prep(s, NewDir());
+        var r = await new SegmentedDownloader(new HttpClient()).RunAsync(req, probe, new DownloadOptions(Connections: 3, SpeedLimitBytesPerSec: 800_000),
+            new SyncProgress(_ => throw new InvalidOperationException("the UI went away")), default);
+        Assert.Equal(s.Body, await File.ReadAllBytesAsync(r.Path));
+    }
 }

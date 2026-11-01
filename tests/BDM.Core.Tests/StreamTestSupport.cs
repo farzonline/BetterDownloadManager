@@ -101,6 +101,8 @@ public sealed class StreamServer : IAsyncDisposable
     int _livePolls;
     public List<(string Path, string? Referer, string? Cookie)> Requests { get; } = new();
     public Func<int, string>? Live { get; set; }
+    /// <summary>HTTP status for the live playlist per poll (default 200).</summary>
+    public Func<int, int>? LiveStatus { get; set; }
     public int LivePolls => Volatile.Read(ref _livePolls);
     public Uri Base { get; }
 
@@ -116,8 +118,11 @@ public sealed class StreamServer : IAsyncDisposable
             lock (Requests) Requests.Add((path, ctx.Request.Headers.Referer.ToString(), ctx.Request.Headers.Cookie.ToString()));
             if (path == "/live.m3u8" && Live != null)
             {
+                var poll = Interlocked.Increment(ref _livePolls) - 1;
+                var status = LiveStatus?.Invoke(poll) ?? 200;
+                if (status != 200) { ctx.Response.StatusCode = status; return; }
                 ctx.Response.ContentType = "application/vnd.apple.mpegurl";
-                await ctx.Response.WriteAsync(Live(Interlocked.Increment(ref _livePolls) - 1));
+                await ctx.Response.WriteAsync(Live(poll));
                 return;
             }
             var file = Path.Combine(root, path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));

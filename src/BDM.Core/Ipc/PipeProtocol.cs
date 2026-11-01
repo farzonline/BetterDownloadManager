@@ -28,7 +28,8 @@ public static class PipeProtocol
 /// <summary>One request line out, one reply line back, over the app's named pipe.</summary>
 public static class PipeClient
 {
-    public static async Task<HostReply> SendAsync(string pipeName, HostMessage msg, TimeSpan connectTimeout, CancellationToken ct = default)
+    /// <param name="replyTimeout">How long to wait for the answer once connected (default 30 s).</param>
+    public static async Task<HostReply> SendAsync(string pipeName, HostMessage msg, TimeSpan connectTimeout, CancellationToken ct = default, TimeSpan? replyTimeout = null)
     {
         await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         await pipe.ConnectAsync((int)connectTimeout.TotalMilliseconds, ct);
@@ -36,7 +37,7 @@ public static class PipeClient
         await w.WriteLineAsync(JsonSerializer.Serialize(msg, PipeProtocol.Json));
         using var r = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        limit.CancelAfter(TimeSpan.FromSeconds(30));
+        limit.CancelAfter(replyTimeout ?? TimeSpan.FromSeconds(30));
         var line = await r.ReadLineAsync(limit.Token);
         return line == null
             ? new HostReply(false, "BDM closed the connection without replying.", false)

@@ -33,6 +33,8 @@ public sealed class TestServer : IAsyncDisposable
     public string? RequiredAuthorization { get; set; }
     public List<string?> Authorizations { get; } = new();
     public long BytesServed => Interlocked.Read(ref _bytesServed);
+    /// <summary>Makes the signed link valid again (the owner opened the page and got a fresh one).</summary>
+    public void ResetExpiry() { ExpireAfterBytes = -1; _expired = false; }
     public Uri BaseUri { get; private set; } = null!;
     public Uri FileUrl => new(BaseUri, "/file");
 

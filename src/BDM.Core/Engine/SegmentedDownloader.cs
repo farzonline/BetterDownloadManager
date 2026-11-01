@@ -15,11 +15,12 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
     /// <summary>The server did not honor a Range request (200, or a different range): fall back to a clean full download.</summary>
     sealed class RangeIgnoredException : Exception;
 
+    /// <param name="partKey">Makes the .bdmpart name unique per download, so same-named downloads in one folder never share partial data.</param>
     public async Task<DownloadResult> RunAsync(DownloadRequest req, FileProbe probe, DownloadOptions opts,
-        IProgress<DownloadProgress>? progress, CancellationToken ct)
+        IProgress<DownloadProgress>? progress, CancellationToken ct, string? partKey = null)
     {
         Directory.CreateDirectory(req.DestinationDir);
-        var part = Path.Combine(req.DestinationDir, probe.FileName + ".bdmpart");
+        var part = Path.Combine(req.DestinationDir, probe.FileName + (partKey == null ? "" : "." + partKey) + ".bdmpart");
         var side = part + ".json";
         var lim = limiter ?? (opts.SpeedLimitBytesPerSec is > 0 ? new SpeedLimiter(opts.SpeedLimitBytesPerSec.Value) : null);
 
@@ -100,7 +101,7 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
             }
             ct.ThrowIfCancellationRequested();
             if (fault != null) throw fault is DownloadException or RangeIgnoredException ? fault : new DownloadException(DownloadFailure.Network, fault.Message, fault);
-            progress?.Report(Snapshot(map, length, 0));
+            Report(progress, Snapshot(map, length, 0));
         }
 
         return Finish(req, probe, part, side);
@@ -121,11 +122,23 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
                 clock.Restart();
                 var speed = dt > 0 ? (snap.Downloaded - last) / dt : 0;
                 last = snap.Downloaded;
-                progress?.Report(snap with { BytesPerSec = speed });
-                if (++ticks % 5 == 0) SegmentSidecar.Save(side, map, probe.ETag, probe.LastModified);
+                Report(progress, snap with { BytesPerSec = speed });
+                if (++ticks % 5 == 0)
+                {
+                    // A scanner or indexer briefly holding the sidecar must not fail a download that is otherwise fine.
+                    try { SegmentSidecar.Save(side, map, probe.ETag, probe.LastModified); }
+                    catch (IOException e) { Log.Error("Could not save the resume file", e); }
+                }
             }
         }
         catch (OperationCanceledException) { }
+    }
+
+    /// <summary>A broken progress listener (a window that went away) must never fail the download it is watching.</summary>
+    static void Report(IProgress<DownloadProgress>? progress, DownloadProgress value)
+    {
+        try { progress?.Report(value); }
+        catch (Exception e) when (e is not OperationCanceledException) { Log.Error("A progress listener failed", e); }
     }
 
     static DownloadProgress Snapshot(SegmentMap map, long length, double speed)
@@ -229,12 +242,12 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
                         seg[0].Downloaded = done;
                         if (clock.ElapsedMilliseconds >= 200)
                         {
-                            progress?.Report(new DownloadProgress(done, total, window / clock.Elapsed.TotalSeconds, seg));
+                            Report(progress, new DownloadProgress(done, total, window / clock.Elapsed.TotalSeconds, seg));
                             clock.Restart();
                             window = 0;
                         }
                     }
-                    progress?.Report(new DownloadProgress(done, total, 0, seg));
+                    Report(progress, new DownloadProgress(done, total, 0, seg));
                 }
                 return Finish(req, probe, part, side);
             }
@@ -252,8 +265,7 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
 
     static DownloadResult Finish(DownloadRequest req, FileProbe probe, string part, string side)
     {
-        var final = Path.Combine(req.DestinationDir, FileNaming.Unique(req.DestinationDir, probe.FileName));
-        File.Move(part, final);
+        var final = FileNaming.MoveUnique(part, req.DestinationDir, probe.FileName);
         if (File.Exists(side)) File.Delete(side);
         return new DownloadResult(final, new FileInfo(final).Length);
     }

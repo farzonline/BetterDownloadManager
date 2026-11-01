@@ -5,6 +5,7 @@
 
   function install(opts) {
     var doc = opts.document;
+    var host = null;
     var button = null;
     var current = null;
 
@@ -15,7 +16,8 @@
       button.style.left = Math.max(0, rect.right - 168) + 'px';
     }
     function remove() {
-      if (button) button.remove();
+      if (host) host.remove();
+      host = null;
       button = null;
       current = null;
     }
@@ -23,6 +25,9 @@
       if (button && current === video) { place(); return; }
       remove();
       current = video;
+      // A closed shadow root keeps the page's scripts from finding, restyling or clicking the button.
+      host = doc.createElement('div');
+      var root = host.attachShadow ? host.attachShadow({ mode: 'closed' }) : host;
       button = doc.createElement('button');
       button.textContent = 'Download this video';
       button.style.cssText = '';
@@ -39,13 +44,15 @@
       button.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        opts.onClick();
+        if (e.isTrusted) opts.onClick(); // a click the page made up must not start a download
       });
-      (doc.body || doc.documentElement).appendChild(button);
+      root.appendChild(button);
+      (doc.body || doc.documentElement).appendChild(host);
       place();
     }
 
     doc.addEventListener('play', function (e) {
+      if (!e.isTrusted) return; // a page can fake a play event to make the button appear
       var video = e.target;
       if (!video || String(video.tagName).toLowerCase() !== 'video') return;
       return Promise.all([opts.getSettings(), opts.hasItems()]).then(function (r) {

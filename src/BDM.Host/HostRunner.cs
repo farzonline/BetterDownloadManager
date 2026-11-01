@@ -9,8 +9,11 @@ public interface IAppLink
 }
 
 /// <summary>Forwards messages to the app over its pipe, launching the app first if it is not running.</summary>
-public sealed class PipeAppLink(string pipeName, string appExe, TimeSpan startTimeout, Action<string>? start = null) : IAppLink
+public sealed class PipeAppLink(string pipeName, string appExe, TimeSpan startTimeout, Action<string>? start = null, TimeSpan? replyTimeout = null) : IAppLink
 {
+    /// <summary>The app answers an "add" only after the owner has decided in its dialog, so this is generous: giving up early would make the browser download the file as well.</summary>
+    public static readonly TimeSpan DefaultReplyTimeout = TimeSpan.FromMinutes(5);
+
     public async Task<HostReply> SendAsync(HostMessage msg, CancellationToken ct)
     {
         var state = await AppLauncher.EnsureRunningAsync(pipeName, appExe, startTimeout, start);
@@ -18,7 +21,7 @@ public sealed class PipeAppLink(string pipeName, string appExe, TimeSpan startTi
             return new HostReply(false, "BDM is not running and could not be started. The browser will download this file itself.", state.Started);
         try
         {
-            var reply = await PipeClient.SendAsync(pipeName, msg, TimeSpan.FromSeconds(5), ct);
+            var reply = await PipeClient.SendAsync(pipeName, msg, TimeSpan.FromSeconds(5), ct, replyTimeout ?? DefaultReplyTimeout);
             return reply with { AppStarted = state.Started };
         }
         catch (Exception e) when (e is TimeoutException or IOException or OperationCanceledException)

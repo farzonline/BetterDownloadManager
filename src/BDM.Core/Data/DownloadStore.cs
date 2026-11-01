@@ -86,7 +86,8 @@ public sealed class DownloadStore : IDisposable
 
     record Dump(List<QueueDefinition> Queues, List<DownloadRecord> Downloads);
 
-    public string Export() => JsonSerializer.Serialize(new Dump(Queues().ToList(), All().ToList()), Json);
+    /// <summary>Backup/export never carries cookies or Authorization headers, even for unfinished downloads.</summary>
+    public string Export() => JsonSerializer.Serialize(new Dump(Queues().ToList(), All().Select(r => r.WithoutSecrets()).ToList()), Json);
 
     public void Import(string json)
     {

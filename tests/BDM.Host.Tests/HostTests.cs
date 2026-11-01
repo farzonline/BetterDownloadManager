@@ -19,10 +19,13 @@ public class HostTests
         readonly string _name;
         readonly CancellationTokenSource _cts = new();
         public List<HostMessage> Received { get; } = new();
+        /// <summary>How long the app takes to answer, like a person deciding in the "Add download" dialog.</summary>
+        public TimeSpan ReplyDelay { get; init; }
 
-        public FakeAppPipe(string name)
+        public FakeAppPipe(string name, TimeSpan? replyDelay = null)
         {
             _name = name;
+            ReplyDelay = replyDelay ?? TimeSpan.Zero;
             _ = Task.Run(async () =>
             {
                 while (!_cts.IsCancellationRequested)
@@ -36,6 +39,7 @@ public class HostTests
                         var line = await r.ReadLineAsync();
                         if (string.IsNullOrEmpty(line)) continue; // a liveness probe that connected and left
                         lock (Received) Received.Add(JsonSerializer.Deserialize<HostMessage>(line, Json)!);
+                        if (ReplyDelay > TimeSpan.Zero) await Task.Delay(ReplyDelay);
                         var w = new StreamWriter(s, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
                         await w.WriteLineAsync(JsonSerializer.Serialize(new HostReply(true, null, false), Json));
                         s.WaitForPipeDrain();
@@ -94,6 +98,36 @@ public class HostTests
         Assert.False(reply.AppStarted);
         Assert.Equal("http://x/a.zip", Assert.Single(app.Received).Url);
         Assert.Equal("a=b", app.Received[0].Cookie);
+    }
+
+    // The app answers "add" only after the owner decides in its dialog; giving up early makes the browser download the file too.
+    [Fact]
+    public async Task Host_WaitsForASlowAnswer_InsteadOfLettingTheBrowserDownloadToo()
+    {
+        var name = UniquePipe();
+        await using var app = new FakeAppPipe(name, TimeSpan.FromMilliseconds(800));
+        var stdout = new MemoryStream();
+        var link = new PipeAppLink(name, "unused.exe", TimeSpan.FromSeconds(2), _ => throw new InvalidOperationException("must not launch"), TimeSpan.FromSeconds(10));
+
+        await new HostRunner(link).RunAsync(Framed(Add("http://x/a.zip")), stdout, default);
+
+        Assert.True(Assert.Single(await ReadReplies(stdout)).Ok);
+        Assert.True(PipeAppLink.DefaultReplyTimeout >= TimeSpan.FromMinutes(2), "a person may take minutes to answer the dialog");
+    }
+
+    [Fact]
+    public async Task Host_GivesUp_WhenTheAppNeverAnswersWithinTheReplyTimeout()
+    {
+        var name = UniquePipe();
+        await using var app = new FakeAppPipe(name, TimeSpan.FromSeconds(3));
+        var stdout = new MemoryStream();
+        var link = new PipeAppLink(name, "unused.exe", TimeSpan.FromSeconds(2), _ => throw new InvalidOperationException("must not launch"), TimeSpan.FromMilliseconds(300));
+
+        await new HostRunner(link).RunAsync(Framed(Add("http://x/a.zip")), stdout, default);
+
+        var reply = Assert.Single(await ReadReplies(stdout));
+        Assert.False(reply.Ok);
+        Assert.Contains("did not answer", reply.Error);
     }
 
     [Fact]

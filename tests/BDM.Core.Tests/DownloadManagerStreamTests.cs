@@ -91,7 +91,7 @@ public class DownloadManagerStreamTests : IClassFixture<StreamMedia>
         store.Import(m.ExportAll());
         var copy = store.Get(id)!;
         Assert.Equal("https://p/", copy.Stream!.Headers["Referer"]);
-        Assert.Equal("a=b", copy.Stream.CookieHeader);
+        Assert.Null(copy.Stream.CookieHeader); // session secrets are dropped once a download is done, and never exported
         Assert.Equal(StreamKind.Hls, copy.Stream.Kind);
         Assert.NotNull(copy.StreamChoice);
     }

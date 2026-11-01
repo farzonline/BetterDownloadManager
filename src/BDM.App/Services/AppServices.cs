@@ -26,19 +26,16 @@ public sealed class ProxyClientProvider(ProxyProfileStore profiles, CredentialVa
             if (string.IsNullOrEmpty(profileId)) return _direct ??= HttpClients.Create(null, vault);
             if (_clients.TryGetValue(profileId, out var c)) return c;
             var profile = profiles.Load().FirstOrDefault(p => p.Id == profileId);
-            if (profile == null) return _direct ??= HttpClients.Create(null, vault); // profile was deleted: fall back to direct
+            // A deleted profile must never quietly turn into a direct connection: that would expose the real address the profile was there to hide.
+            if (profile == null) throw new InvalidOperationException("The proxy profile this download uses no longer exists. Pick another one, or none, and try again.");
             return _clients[profileId] = HttpClients.Create(profile, vault);
         }
     }
 
-    /// <summary>Call after profiles or their passwords change.</summary>
+    /// <summary>Call after profiles or their passwords change. Running downloads keep the client they started with; the next one gets a fresh client.</summary>
     public void Invalidate()
     {
-        lock (_gate)
-        {
-            foreach (var c in _clients.Values) c.Dispose();
-            _clients.Clear();
-        }
+        lock (_gate) _clients.Clear(); // not disposed: a download may be in the middle of using one
     }
 
     public IReadOnlyList<ProxyChoice> Choices(string noneLabel = "No proxy") =>

@@ -146,6 +146,7 @@ public class NetSupportTests
         Assert.Equal("https://u:pw@secure.example.com:443", ProxyUrls.For("h2", store, vault));
         Assert.Null(ProxyUrls.For(null, store, vault));
         Assert.Null(ProxyUrls.For("", store, vault));
-        Assert.Null(ProxyUrls.For("deleted-profile", store, vault));
+        // a profile the download still points at but that was deleted must NOT silently mean "direct" (that would leak the real IP)
+        Assert.Throws<InvalidOperationException>(() => ProxyUrls.For("deleted-profile", store, vault));
     }
 }

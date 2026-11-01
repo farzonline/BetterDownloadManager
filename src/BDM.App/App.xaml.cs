@@ -3,6 +3,7 @@ using BDM.App.Services;
 using BDM.App.Settings;
 using BDM.App.ViewModels;
 using BDM.App.Views;
+using BDM.Core;
 using BDM.Core.Api;
 using BDM.Core.Data;
 using BDM.Core.Engine;
@@ -44,6 +45,11 @@ public partial class App : Application
         ThemeManager.Initialize(settings.ThemeMode);
 
         Directory.CreateDirectory(AppSettings.DataDir);
+        Log.Configure(Path.Combine(AppSettings.DataDir, "logs"));
+        // Logged, not handled: the app still crashes as before, but now there is a trace of why.
+        DispatcherUnhandledException += (_, a) => Log.Error("Unhandled UI exception", a.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, a) => Log.Error("Unhandled exception", a.ExceptionObject as Exception ?? new Exception(a.ExceptionObject?.ToString()));
+        TaskScheduler.UnobservedTaskException += (_, a) => Log.Error("Unobserved task exception", a.Exception);
         _store = new DownloadStore(Path.Combine(AppSettings.DataDir, "bdm.db"));
         var vault = new CredentialVault(Path.Combine(AppSettings.DataDir, "vault.json"));
         var profiles = new ProxyProfileStore(Path.Combine(AppSettings.DataDir, "profiles.json"));

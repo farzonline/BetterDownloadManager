@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using BDM.Core;
 using BDM.Core.Ipc;
 
 namespace BDM.App.Services;
@@ -47,7 +48,7 @@ public sealed class PipeServer(string pipeName, Func<HostMessage, Task<HostReply
                     reply = await handler(msg);
                 }
                 catch (JsonException) { reply = new HostReply(false, "Bad message.", false); }
-                catch (Exception e) { reply = new HostReply(false, e.Message, false); }
+                catch (Exception e) { Log.Error("The pipe handler failed", e); reply = new HostReply(false, e.Message, false); }
 
                 var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
                 await writer.WriteLineAsync(JsonSerializer.Serialize(reply, PipeProtocol.Json));

@@ -92,15 +92,8 @@ public sealed class StreamDownloader(HttpClient http, FfmpegLocator ffmpeg)
 
             var inputs = new List<string> { tracks[0].Path };
             if (tracks.Length > 1) inputs.Add(tracks[1].Path);
-            var args = new List<string>();
-            foreach (var i in inputs) { args.Add("-i"); args.Add(i); }
             var mergeSubs = o.MergeSubtitles ? subtitleFiles : new List<string>();
-            foreach (var f in mergeSubs) { args.Add("-i"); args.Add(f); }
-            if (tracks.Length > 1) args.AddRange(["-map", "0:v", "-map", "1:a"]); else args.AddRange(["-map", "0"]);
-            for (var i = 0; i < mergeSubs.Count; i++) { args.Add("-map"); args.Add((inputs.Count + i).ToString(CultureInfo.InvariantCulture)); }
-            args.AddRange(["-c", "copy"]);
-            if (mergeSubs.Count > 0) args.AddRange(["-c:s", "mov_text"]);
-            args.AddRange(["-movflags", "+faststart", output]);
+            var args = BuildMergeArgs(inputs, tracks.Length > 1, mergeSubs, output);
             await FfmpegRunner.RunAsync(ff, args, mergeCt);
 
             if (s.ThumbnailUrl != null)
@@ -119,6 +112,23 @@ public sealed class StreamDownloader(HttpClient http, FfmpegLocator ffmpeg)
         {
             try { Directory.Delete(work, true); } catch (IOException) { }
         }
+    }
+
+    /// <summary>
+    /// ffmpeg arguments for the final remux. Only video and audio are mapped: "-map 0" would also pull timed-ID3, DVB subtitle
+    /// and other data streams from .ts segments into the mp4 muxer, which cannot hold them.
+    /// </summary>
+    public static IReadOnlyList<string> BuildMergeArgs(IReadOnlyList<string> inputs, bool separateAudio, IReadOnlyList<string> subtitleFiles, string output)
+    {
+        var args = new List<string>();
+        foreach (var i in inputs) { args.Add("-i"); args.Add(i); }
+        foreach (var f in subtitleFiles) { args.Add("-i"); args.Add(f); }
+        if (separateAudio) args.AddRange(["-map", "0:v", "-map", "1:a"]); else args.AddRange(["-map", "0:v?", "-map", "0:a?"]);
+        for (var i = 0; i < subtitleFiles.Count; i++) { args.Add("-map"); args.Add((inputs.Count + i).ToString(CultureInfo.InvariantCulture)); }
+        args.AddRange(["-c", "copy"]);
+        if (subtitleFiles.Count > 0) args.AddRange(["-c:s", "mov_text"]);
+        args.AddRange(["-movflags", "+faststart", output]);
+        return args;
     }
 
     sealed record TrackFile(string Path, bool WasLive);
@@ -156,6 +166,7 @@ public sealed class StreamDownloader(HttpClient http, FfmpegLocator ffmpeg)
         var live = !pl.Ended;
         var path = outBase + (pl.Map != null ? ".mp4" : ".ts");
         long bytes = 0;
+        var captured = 0; // media segments written so far
 
         await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16, true);
         try
@@ -174,7 +185,7 @@ public sealed class StreamDownloader(HttpClient http, FfmpegLocator ffmpeg)
                 foreach (var window in fresh.Chunk(Math.Max(1, o.Parallel)))
                 {
                     var parts = await Task.WhenAll(window.Select(seg => f.GetSegmentAsync(seg, ct)));
-                    foreach (var part in parts) { await fs.WriteAsync(part, ct); bytes += part.Length; }
+                    foreach (var part in parts) { await fs.WriteAsync(part, ct); bytes += part.Length; captured++; }
                     meter.Set(slot, bytes);
                 }
                 if (!live || pl.Ended) break;
@@ -188,6 +199,11 @@ public sealed class StreamDownloader(HttpClient http, FfmpegLocator ffmpeg)
         catch (OperationCanceledException) when (live)
         {
             // Stopping a live capture is the normal way to finish it: keep what was written.
+        }
+        catch (Exception e) when (live && captured > 0 && e is DownloadException or HttpRequestException)
+        {
+            // The playlist link expired or the server went away an hour into a live capture: finish with what we have rather than lose it.
+            Log.Info($"Live capture ended by an error after {captured} segments: {e.Message}");
         }
         await fs.FlushAsync(CancellationToken.None);
         return new TrackFile(path, live);

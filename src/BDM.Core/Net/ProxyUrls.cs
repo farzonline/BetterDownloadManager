@@ -3,12 +3,12 @@ namespace BDM.Core.Net;
 /// <summary>Turns a saved proxy profile into a proxy URL for tools that run outside our HttpClient (yt-dlp).</summary>
 public static class ProxyUrls
 {
-    /// <returns>null for "no proxy" or an unknown (deleted) profile.</returns>
+    /// <returns>null for "no proxy". Throws for a profile that no longer exists: going direct instead would leak the real address.</returns>
     public static string? For(string? profileId, ProxyProfileStore profiles, CredentialVault vault)
     {
         if (string.IsNullOrEmpty(profileId)) return null;
         var p = profiles.Load().FirstOrDefault(x => x.Id == profileId);
-        if (p == null) return null;
+        if (p == null) throw new InvalidOperationException("The proxy profile this download uses no longer exists. Pick another one, or none, and try again.");
         // socks5h: let the proxy resolve host names, so the lookups don't leak outside the tunnel.
         var scheme = p.Kind == ProxyKind.Socks5 ? "socks5h" : p.Port == 443 ? "https" : "http";
         var user = p.Username == null ? "" : Uri.EscapeDataString(p.Username) + (vault.Load(p.VaultKey) is { } pw ? ":" + Uri.EscapeDataString(pw) : "") + "@";

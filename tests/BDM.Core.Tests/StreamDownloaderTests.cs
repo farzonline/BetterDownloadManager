@@ -202,4 +202,38 @@ public class StreamDownloaderTests : IClassFixture<StreamMedia>
         Assert.True(server.Requests.Count >= 5, "playlist (x2), key and three segments expected");
         Assert.All(server.Requests, r => { Assert.Equal("https://page.example/watch", r.Referer); Assert.Equal("sid=1", r.Cookie); });
     }
+
+    [Fact]
+    public async Task Live_PlaylistGoesAway_AfterSomeSegments_FinalizesWhatWasCaptured()
+    {
+        await using var server = new StreamServer(_m.Root);
+        server.Live = poll => LivePlaylist(poll, ended: false);
+        server.LiveStatus = poll => poll >= 4 ? 403 : 200; // the tokenized playlist link expires an hour into a capture
+        var dl = Make();
+        var src = Hls(server.Url("live.m3u8"));
+        var choice = (await dl.ListChoicesAsync(src, default))[0];
+        var path = await dl.DownloadAsync(src, choice, NewDir(), null, default, Opts());
+        var probe = _m.ProbeFile(path);
+        Assert.True(probe.Duration > 3, $"duration {probe.Duration}");
+        Assert.True(probe.HasVideo);
+    }
+
+    [Fact]
+    public void MergeArguments_MapOnlyVideoAndAudio_NeverEverythingInTheFile()
+    {
+        // "-map 0" drags data/subtitle streams (timed ID3, DVB subtitles...) into the mp4 muxer, which cannot hold them.
+        var single = StreamDownloader.BuildMergeArgs(["in.ts"], separateAudio: false, [], "out.mp4");
+        Assert.Contains("0:v?", single);
+        Assert.Contains("0:a?", single);
+        Assert.DoesNotContain("0", single.Where((a, i) => i > 0 && single[i - 1] == "-map" && a == "0")); // never a bare "-map 0"
+        Assert.Equal("out.mp4", single[^1]);
+
+        var split = StreamDownloader.BuildMergeArgs(["v.mp4", "a.mp4"], separateAudio: true, [], "out.mp4");
+        Assert.Equal(new[] { "-map", "0:v", "-map", "1:a" }, split.SkipWhile(a => a != "-map").Take(4));
+
+        var withSubs = StreamDownloader.BuildMergeArgs(["v.ts"], false, ["s.vtt"], "out.mp4");
+        Assert.Contains("1", withSubs.Where((a, i) => i > 0 && withSubs[i - 1] == "-map"));
+        Assert.Contains("mov_text", withSubs);
+        Assert.Equal(new[] { "-i", "v.ts", "-i", "s.vtt" }, withSubs.Take(4));
+    }
 }

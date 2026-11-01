@@ -29,6 +29,8 @@ export class FakeEl {
   append(...kids) { for (const k of kids) { k.parentElement = this; this.children.push(k); } }
   appendChild(k) { this.append(k); return k; }
   remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter((c) => c !== this); this.parentElement = null; }
+  /** Like a closed shadow root: the page gets no handle on it (shadowRoot stays null); tests read it from `closedShadow`. */
+  attachShadow(init) { this.shadowInit = init; this.closedShadow = new FakeEl('#shadow-root'); this.closedShadow.parentElement = this; return this.closedShadow; }
   setAttribute(n, v) { this.attrs[n] = String(v); }
   getAttribute(n) { return this.attrs[n] ?? null; }
   addEventListener(type, fn) { (this.listeners ??= {})[type] = [...(this.listeners?.[type] ?? []), fn]; }

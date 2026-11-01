@@ -16,9 +16,12 @@ public static class FileNaming
         ["application/vnd.apple.mpegurl"] = ".m3u8", ["application/dash+xml"] = ".mpd",
     };
 
+    // U+202E (right-to-left override) and friends can make a name display backwards: "invoice<RLO>fdp.exe" looks like "invoiceexe.pdf".
+    static readonly Regex BidiControls = new(@"[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]", RegexOptions.Compiled);
+
     public static string Sanitize(string name)
     {
-        var s = Illegal.Replace(name, "_").TrimEnd('.', ' ');
+        var s = Illegal.Replace(BidiControls.Replace(name, ""), "_").TrimEnd('.', ' ');
         if (s.Length == 0) s = "download";
         var ext = Path.GetExtension(s);
         var stem = Path.GetFileNameWithoutExtension(s);
@@ -36,6 +39,19 @@ public static class FileNaming
         {
             var candidate = $"{stem} ({i}){ext}";
             if (!File.Exists(Path.Combine(dir, candidate))) return candidate;
+        }
+    }
+
+    static readonly object MoveGate = new();
+
+    /// <summary>Moves a finished part file to its final, unused name. Serialised, so two same-named downloads finishing together get different names.</summary>
+    public static string MoveUnique(string part, string dir, string name)
+    {
+        lock (MoveGate)
+        {
+            var final = Path.Combine(dir, Unique(dir, name));
+            File.Move(part, final);
+            return final;
         }
     }
 
