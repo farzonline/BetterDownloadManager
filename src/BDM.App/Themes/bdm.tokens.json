@@ -1,0 +1,54 @@
+{
+  "name": "Better Download Manager",
+  "kind": "forged",
+  "modeNames": { "dark": "Nightfall", "light": "Daybreak" },
+  "notes": "BDM's own identity, deliberately unlike the house Voltage/Daylight green. Dark = a deep midnight-indigo chassis with blue-tinted surfaces; the brand colour is an electric violet-blue (#7c6cff) that runs into cyan (#22d3ee) in gradients (progress, the logo, hero headers - gradients live in Brand.xaml, not in the token roles). Light = cool paper white with the same hue family; accent #5b4bff, accentText #4435e0. Radii are larger and rounder than the house style (card 18, box 14, input 10, button 10, item 10). Values to be adjusted by validate_contrast.py are recorded below.",
+  "modes": {
+    "dark": {
+      "background": "#0a0d1a",
+      "backgroundAlt": "#0e1224",
+      "surface": "#121830",
+      "surfaceAlt": "#0f1428",
+      "raised": "#1a2142",
+      "line": "#262f58",
+      "selection": "#27325f",
+      "text": "#eef1ff",
+      "textMuted": "#98a1cc",
+      "accent": "#7c6cff",
+      "accentHover": "#9486ff",
+      "accentText": "#a99dff",
+      "onAccent": "#0a0820",
+      "focus": "#38d9f5",
+      "success": "#3ddc97",
+      "warn": "#ffc857",
+      "danger": "#ff7080"
+    },
+    "light": {
+      "background": "#f2f4fc",
+      "backgroundAlt": "#e8ecf9",
+      "surface": "#ffffff",
+      "surfaceAlt": "#f7f8fe",
+      "raised": "#eceffa",
+      "line": "#d6dcf0",
+      "selection": "#dde2fb",
+      "text": "#12152b",
+      "textMuted": "#4f567a",
+      "accent": "#5b4bff",
+      "accentHover": "#4a3be6",
+      "accentText": "#4435e0",
+      "onAccent": "#ffffff",
+      "focus": "#0b6f92",
+      "success": "#0a7a50",
+      "warn": "#8a5600",
+      "danger": "#bf2638"
+    }
+  },
+  "type": {
+    "display": "Bahnschrift, Segoe UI Variable Display, Segoe UI",
+    "text": "Segoe UI Variable Text, Segoe UI",
+    "mono": "Cascadia Mono, Consolas",
+    "size": { "caption": 11, "body": 13, "subtitle": 15, "title": 22, "display": 30 }
+  },
+  "radius": { "card": 18, "box": 14, "input": 10, "button": 10, "item": 10, "pill": 999 },
+  "elevation": { "flat": "none", "raised": "0 4 14 0.30", "overlay": "0 12 36 0.45" }
+}

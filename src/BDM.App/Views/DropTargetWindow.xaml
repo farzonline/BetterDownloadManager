@@ -2,11 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Drop links" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" Width="72" Height="72" AllowDrop="True"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" Width="84" Height="84" AllowDrop="True"
         DragEnter="Window_DragEnter" DragLeave="Window_DragLeave" Drop="Window_Drop" MouseLeftButtonDown="Window_MouseDown">
-  <Border x:Name="Box" Margin="4" CornerRadius="14" Background="{DynamicResource Brush.Surface}"
-          BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" ToolTip="Drop links here to download them. Drag to move; double-click to hide.">
-    <TextBlock Text="&#xE896;" FontFamily="{DynamicResource Font.Icon}" FontSize="28"
-               Foreground="{DynamicResource Brush.TextMuted}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+  <!-- A glowing brand-gradient orb: drop a link on it -->
+  <Border x:Name="Box" Margin="8" CornerRadius="26" Background="{DynamicResource Brush.Surface}"
+          BorderBrush="{DynamicResource Brush.Line}" BorderThickness="2" Effect="{StaticResource Effect.Glow}"
+          ToolTip="Drop links here to download them. Drag to move; double-click to hide.">
+    <Border Margin="8" CornerRadius="18" Background="{StaticResource Brush.Brand}">
+      <TextBlock Text="&#xE896;" FontFamily="{DynamicResource Font.Icon}" FontSize="26" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+    </Border>
   </Border>
 </Window>

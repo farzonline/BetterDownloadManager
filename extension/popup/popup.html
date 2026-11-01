@@ -4,25 +4,55 @@
 <meta charset="utf-8">
 <title>Better Download Manager</title>
 <style>
-  :root { color-scheme: light dark; --bg: #fff; --fg: #1a1a1a; --muted: #6b7280; --line: #e5e7eb; --accent: #16a34a; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #ececec; --muted: #9ca3af; --line: #2a2a2a; } }
-  body { margin: 0; width: 380px; background: var(--bg); color: var(--fg); font: 13px system-ui, sans-serif; }
-  header { padding: 10px 12px; font-weight: 600; border-bottom: 1px solid var(--line); }
-  #empty { padding: 18px 12px; color: var(--muted); }
-  .item { padding: 8px 12px; border-bottom: 1px solid var(--line); }
-  .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { color: var(--muted); font-size: 12px; margin: 2px 0 6px; }
-  .tag { display: inline-block; padding: 0 6px; border-radius: 8px; background: var(--line); margin-right: 6px; }
-  button { font: inherit; padding: 3px 9px; margin-right: 6px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--fg); cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .5; cursor: default; }
-  .status { color: var(--muted); font-size: 12px; margin-left: 2px; }
-  footer { padding: 8px 12px; }
+  /* BDM identity: midnight indigo, violet-to-cyan brand gradient. Tokens mirror src/BDM.App/Themes (Nightfall / Daybreak). */
+  :root {
+    color-scheme: light dark;
+    --bg: #f2f4fc; --surface: #ffffff; --raised: #eceffa; --line: #d6dcf0; --fg: #12152b; --muted: #4f567a;
+    --accent: #5b4bff; --on-accent: #fff; --accent-text: #4435e0; --danger: #bf2638; --warn: #8a5600; --ok: #0a7a50;
+    --wash: rgba(124, 108, 255, .18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0d1a; --surface: #121830; --raised: #1a2142; --line: #262f58; --fg: #eef1ff; --muted: #98a1cc;
+      --accent: #7c6cff; --on-accent: #0a0820; --accent-text: #a99dff; --danger: #ff7080; --warn: #ffc857; --ok: #3ddc97;
+      --wash: rgba(124, 108, 255, .28);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; width: 400px; background: var(--bg); color: var(--fg); font: 13px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(120deg, var(--wash), transparent 70%); }
+  header img { width: 34px; height: 34px; border-radius: 10px; box-shadow: 0 4px 14px rgba(124, 108, 255, .45); }
+  header b { display: block; font: 600 15px Bahnschrift, "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+  header small { color: var(--muted); }
+  #empty { padding: 26px 20px; color: var(--muted); text-align: center; line-height: 1.5; }
+  #empty .art { width: 64px; height: 64px; margin: 0 auto 10px; border-radius: 20px; display: grid; place-items: center;
+    background: var(--wash); color: var(--accent-text); font-size: 28px; }
+  #list { padding: 10px 12px 2px; }
+  .item { display: grid; grid-template-columns: 40px 1fr; gap: 12px; padding: 12px; margin-bottom: 8px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 14px; }
+  .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 18px; background: var(--wash); color: var(--accent-text); }
+  .ico.hls, .ico.dash { background: rgba(244, 63, 94, .18); color: #f43f5e; }
+  .ico.file { background: rgba(14, 165, 233, .18); color: #0ea5e9; }
+  .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 13.5px; }
+  .meta { color: var(--muted); font-size: 12px; margin: 3px 0 9px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--raised); margin-right: 6px; font-weight: 600; font-size: 10.5px; letter-spacing: .04em; }
+  .protected { color: var(--warn); }
+  button { font: inherit; padding: 5px 12px; margin: 0 6px 4px 0; border: 1px solid var(--line); border-radius: 9px; background: var(--raised); color: var(--fg); cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid #38d9f5; outline-offset: 2px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; box-shadow: 0 4px 14px rgba(124, 108, 255, .35); }
+  button:disabled { opacity: .5; cursor: default; box-shadow: none; }
+  .status { color: var(--accent-text); font-size: 12px; margin-left: 2px; }
+  footer { padding: 8px 16px; color: var(--muted); }
+  footer:empty { display: none; }
+  footer label { display: block; margin: 4px 0; }
+  #page { border-top: 1px solid var(--line); padding-top: 12px; }
 </style>
 </head>
 <body>
-<header>Better Download Manager</header>
-<div id="empty">No media found on this page yet. Play the video, then reopen this popup.</div>
+<header><img src="../icon.png" alt=""><div><b>Better Download Manager</b><small>Catches the video on this page</small></div></header>
+<div id="empty"><div class="art">⬇</div>No media found on this page yet.<br>Play the video, then reopen this popup.</div>
 <div id="list"></div>
 <footer id="page"></footer>
 <footer id="deep"></footer>

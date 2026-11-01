@@ -22,7 +22,11 @@ function render(tabId, items) {
     const meta = document.createElement('div');
     meta.className = 'meta';
     meta.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: item.kind.toUpperCase() }),
-      [fmtSize(item.size), item.protected ? 'Protected (DRM) — cannot be downloaded' : ''].filter(Boolean).join(' · '));
+      fmtSize(item.size));
+    if (item.protected) meta.append(Object.assign(document.createElement('span'), { className: 'protected', textContent: '🔒 Protected (DRM) — cannot be downloaded' }));
+    const ico = Object.assign(document.createElement('div'), { className: `ico ${item.kind}`, textContent: item.kind === 'hls' || item.kind === 'dash' ? '▶' : '⬇' });
+    const body = document.createElement('div');
+    body.style.minWidth = '0';
     const status = Object.assign(document.createElement('span'), { className: 'status' });
 
     const send = async (ask) => {
@@ -39,7 +43,8 @@ function render(tabId, items) {
     const buttons = [btn('Download', () => send(false), true)];
     if (item.kind === 'hls' || item.kind === 'dash') buttons.push(btn('Choose quality…', () => send(true)));
     buttons.push(Object.assign(btn('Copy URL', () => navigator.clipboard.writeText(item.url)), { disabled: false }));
-    row.append(title, meta, ...buttons, status);
+    body.append(title, meta, ...buttons, status);
+    row.append(ico, body);
     return row;
   }));
 }

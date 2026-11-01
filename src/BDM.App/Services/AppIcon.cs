@@ -7,7 +7,7 @@ using System.Windows.Media.Imaging;
 
 namespace BDM.App.Services;
 
-/// <summary>The app's crest, drawn in code (logo green with a download arrow) so no binary asset is needed.</summary>
+/// <summary>The app crest, drawn in code (brand gradient squircle with a download arrow) so no binary asset is needed.</summary>
 public static class AppIcon
 {
     static Bitmap Draw(int size)
@@ -24,8 +24,9 @@ public static class AppIcon
         path.AddArc(rect.Right - r * 2, rect.Bottom - r * 2, r * 2, r * 2, 0, 90);
         path.AddArc(rect.X, rect.Bottom - r * 2, r * 2, r * 2, 90, 90);
         path.CloseFigure();
-        using (var fill = new SolidBrush(Color.FromArgb(0x04, 0xfa, 0x73))) g.FillPath(fill, path);
-        using var ink = new SolidBrush(Color.FromArgb(0x02, 0x14, 0x0a));
+        using (var fill = new LinearGradientBrush(new RectangleF(0, 0, size, size), Color.FromArgb(0x7c, 0x6c, 0xff), Color.FromArgb(0x22, 0xd3, 0xee), 45f))
+            g.FillPath(fill, path);
+        using var ink = new SolidBrush(Color.White);
         float s = size;
         g.FillRectangle(ink, s * 0.43f, s * 0.2f, s * 0.14f, s * 0.34f);
         g.FillPolygon(ink, new[] { new PointF(s * 0.27f, s * 0.5f), new PointF(s * 0.73f, s * 0.5f), new PointF(s * 0.5f, s * 0.74f) });

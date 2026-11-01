@@ -10,7 +10,7 @@ public sealed class DownloadItemViewModel : ObservableObject
     DateTimeOffset _sampleTime;
     long _sampleBytes;
     double _speed;
-    string _name = "", _statusText = "", _sizeText = "", _speedText = "", _etaText = "";
+    string _name = "", _statusText = "", _sizeText = "", _speedText = "", _etaText = "", _stateKind = "queued";
     double _progress;
     DownloadState _state;
 
@@ -28,6 +28,20 @@ public sealed class DownloadItemViewModel : ObservableObject
     public DateTime Added { get; }
     public string Url { get; }
     public string Category { get; private set; } = "Other";
+    /// <summary>Icon and tile colour of the file type, for the row's leading tile.</summary>
+    public string CategoryGlyph => Categories.Glyph(Category);
+    public string CategoryHue => Categories.Hue(Category);
+    /// <summary>queued / running / paused / done / failed / protected: what the row is coloured and iconed by (never colour alone).</summary>
+    public string StateKind { get => _stateKind; private set { if (Set(ref _stateKind, value)) Raise(nameof(StateGlyph)); } }
+    public string StateGlyph => StateKind switch
+    {
+        "running" => "",
+        "paused" => "",
+        "done" => "",
+        "protected" => "",
+        "failed" => "",
+        _ => "",
+    };
     public string? FilePath { get; private set; }
     public bool IsStream { get; private set; }
     public string AddedText => Added.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
@@ -38,7 +52,9 @@ public sealed class DownloadItemViewModel : ObservableObject
     public string SpeedText { get => _speedText; private set => Set(ref _speedText, value); }
     public string EtaText { get => _etaText; private set => Set(ref _etaText, value); }
     /// <summary>0–100, or -1 when the total size is unknown.</summary>
-    public double Progress { get => _progress; private set => Set(ref _progress, value); }
+    public double Progress { get => _progress; private set { if (Set(ref _progress, value)) Raise(nameof(PercentText)); } }
+    /// <summary>"42%", or a dash while the total size is unknown.</summary>
+    public string PercentText => Progress < 0 ? "—" : $"{Math.Floor(Progress):0}%";
     public DownloadState State { get => _state; private set { if (Set(ref _state, value)) { Raise(nameof(CanPause)); Raise(nameof(CanResume)); Raise(nameof(HasFile)); } } }
 
     public bool CanPause => State is DownloadState.Queued or DownloadState.Running;
@@ -73,8 +89,17 @@ public sealed class DownloadItemViewModel : ObservableObject
         IsStream = r.Stream != null;
         Name = r.FilePath != null ? Path.GetFileName(r.FilePath)
             : r.Request.FileName ?? (r.Stream?.Title is { Length: > 0 } t ? t + ".mp4" : Categories.NameFromUrl(r.Request.Url));
-        Category = r.Stream != null ? "Video" : r.Request.Category ?? Categories.For(Name);
+        var category = r.Stream != null ? "Video" : r.Request.Category ?? Categories.For(Name);
+        if (category != Category) { Category = category; Raise(nameof(Category)); Raise(nameof(CategoryGlyph)); Raise(nameof(CategoryHue)); }
         State = r.State;
+        StateKind = r.State switch
+        {
+            DownloadState.Running => "running",
+            DownloadState.Paused => "paused",
+            DownloadState.Completed => "done",
+            DownloadState.Failed => r.Failure == DownloadFailure.Protected ? "protected" : "failed",
+            _ => "queued",
+        };
 
         var progress = r.State == DownloadState.Completed ? 100
             : r.Total is > 0 ? Math.Min(100, r.Downloaded * 100.0 / r.Total.Value)

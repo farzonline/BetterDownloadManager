@@ -4,26 +4,56 @@
 <meta charset="utf-8">
 <title>BDM options</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { max-width: 560px; margin: 24px auto; padding: 0 16px; font: 14px system-ui, sans-serif; }
-  label { display: block; margin: 14px 0 4px; font-weight: 600; }
-  input[type=text], input[type=number], textarea { width: 100%; box-sizing: border-box; padding: 6px; font: inherit; }
-  .row { margin: 10px 0; }
-  button { font: inherit; padding: 6px 14px; }
+  :root {
+    color-scheme: light dark;
+    --bg: #f2f4fc; --surface: #ffffff; --raised: #eceffa; --line: #d6dcf0; --fg: #12152b; --muted: #4f567a;
+    --accent: #5b4bff; --on-accent: #fff; --wash: rgba(124, 108, 255, .18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0a0d1a; --surface: #121830; --raised: #1a2142; --line: #262f58; --fg: #eef1ff; --muted: #98a1cc; --accent: #7c6cff; --on-accent: #0a0820; --wash: rgba(124, 108, 255, .28); }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 22px max(16px, calc(50% - 280px)); border-bottom: 1px solid var(--line);
+    background: linear-gradient(120deg, var(--wash), transparent 70%); }
+  header img { width: 44px; height: 44px; border-radius: 13px; box-shadow: 0 6px 18px rgba(124, 108, 255, .45); }
+  h1 { margin: 0; font: 600 22px Bahnschrift, "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+  header small { color: var(--muted); }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 40px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; margin-bottom: 14px; }
+  label { display: block; margin: 14px 0 6px; font-weight: 600; }
+  .card > label:first-child, .row label { margin-top: 0; }
+  input[type=text], input[type=number], textarea { width: 100%; padding: 8px 10px; font: inherit; color: var(--fg); background: var(--raised);
+    border: 1px solid var(--line); border-radius: 10px; }
+  input:focus-visible, textarea:focus-visible { outline: 2px solid #38d9f5; outline-offset: 1px; }
+  input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; vertical-align: -3px; margin-right: 8px; }
+  .row { margin: 12px 0; }
+  .row:first-child { margin-top: 0; }
+  button { font: inherit; padding: 8px 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-weight: 600; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(124, 108, 255, .35); }
+  button:focus-visible { outline: 2px solid #38d9f5; outline-offset: 2px; }
+  #status { color: var(--muted); margin-left: 8px; }
+  .tip { color: var(--muted); }
 </style>
 </head>
 <body>
-<h1>Better Download Manager</h1>
-<div class="row"><label><input type="checkbox" id="enabled"> Take over browser downloads</label></div>
-<div class="row"><label><input type="checkbox" id="floatingButton"> Show “Download this video” button over playing video</label></div>
-<label for="minSize">Only take over files larger than (KB; unknown sizes are always taken)</label>
-<input type="number" id="minSize" min="0">
-<label for="types">File types to take over (space separated)</label>
-<textarea id="types" rows="4"></textarea>
-<label for="excluded">Never take over from these sites (one per line)</label>
-<textarea id="excluded" rows="3"></textarea>
-<p><button id="save">Save</button> <span id="status"></span></p>
-<p>Tip: hold <b>Alt</b> while clicking a link to let the browser download it instead.</p>
+<header><img src="../icon.png" alt=""><div><h1>Better Download Manager</h1><small>Browser extension options</small></div></header>
+<main>
+<div class="card">
+  <div class="row"><label><input type="checkbox" id="enabled">Take over browser downloads</label></div>
+  <div class="row"><label><input type="checkbox" id="floatingButton">Show “Download this video” button over playing video</label></div>
+</div>
+<div class="card">
+  <label for="minSize">Only take over files larger than (KB; unknown sizes are always taken)</label>
+  <input type="number" id="minSize" min="0">
+  <label for="types">File types to take over (space separated)</label>
+  <textarea id="types" rows="4"></textarea>
+  <label for="excluded">Never take over from these sites (one per line)</label>
+  <textarea id="excluded" rows="3"></textarea>
+</div>
+<p><button id="save">Save</button><span id="status"></span></p>
+<p class="tip">Tip: hold <b>Alt</b> while clicking a link to let the browser download it instead.</p>
+</main>
 <script src="options.js" type="module"></script>
 </body>
 </html>

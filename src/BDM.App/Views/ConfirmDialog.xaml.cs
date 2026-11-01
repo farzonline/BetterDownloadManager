@@ -11,7 +11,8 @@ public partial class ConfirmDialog : Window
         InitializeComponent();
         ThemeManager.Attach(this);
         Icon = AppIcon.Image();
-        Heading.Text = heading;
+        Header.Title = heading;
+        if (destructive) { Header.Hue = (System.Windows.Media.Color)FindResource("Hue.Rose"); Header.Glyph = ""; }
         Body.Text = body;
         ConfirmButton.Content = confirmLabel;
         if (destructive)

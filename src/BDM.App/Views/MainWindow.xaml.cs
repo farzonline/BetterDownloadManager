@@ -37,7 +37,6 @@ public partial class MainWindow : Window
         manager.Changed += r => Dispatcher.BeginInvoke(() => OnRecordChanged(r));
         vm.AddUrlRequested += () => ShowAddDialog(null);
         vm.RemoveRequested += ConfirmRemove;
-        Loaded += (_, _) => FitNameColumn();
     }
 
     // ---------------------------------------------------------------- add / remove
@@ -78,6 +77,8 @@ public partial class MainWindow : Window
         var c = (Color)FindResource(error ? "Color.Danger" : "Color.AccentText");
         Banner.Background = new SolidColorBrush(Color.FromArgb(31, c.R, c.G, c.B));      // state colour at ~12 %
         Banner.BorderBrush = new SolidColorBrush(Color.FromArgb(89, c.R, c.G, c.B));     // border at ~35 %
+        BannerIcon.Text = error ? "" : "";
+        BannerIcon.Foreground = new SolidColorBrush(c);
         BannerText.Text = text;
         BannerText.ToolTip = text;
         BannerActions.Children.Clear();
@@ -115,17 +116,23 @@ public partial class MainWindow : Window
     void More_Click(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu { PlacementTarget = MoreButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        void Item(string header, Action act) { var mi = new MenuItem { Header = header }; mi.Click += (_, _) => act(); menu.Items.Add(mi); }
-        Item("Batch download…", () => new BatchWindow(_vm) { Owner = this }.ShowDialog());
-        Item("Site grabber…", () => new GrabberWindow(_svc) { Owner = this }.ShowDialog());
+        void Item(string glyph, string header, Action act)
+        {
+            var icon = new TextBlock { Text = glyph, Style = (Style)FindResource("Text.MenuIcon") };
+            var mi = new MenuItem { Header = header, Icon = icon };
+            mi.Click += (_, _) => act();
+            menu.Items.Add(mi);
+        }
+        Item("", "Batch download…", () => new BatchWindow(_vm) { Owner = this }.ShowDialog());
+        Item("", "Site grabber…", () => new GrabberWindow(_svc) { Owner = this }.ShowDialog());
         menu.Items.Add(new Separator());
-        Item("Queues and schedule…", () => new QueuesWindow(_svc) { Owner = this }.ShowDialog());
-        Item("Site logins…", () => new SitesLoginWindow(_svc) { Owner = this }.ShowDialog());
-        Item("Proxy and VPN profiles…", () => new ProxyProfilesWindow(_svc) { Owner = this }.ShowDialog());
-        Item("Download history…", () => new HistoryWindow(_svc) { Owner = this }.ShowDialog());
+        Item("", "Queues and schedule…", () => new QueuesWindow(_svc) { Owner = this }.ShowDialog());
+        Item("", "Site logins…", () => new SitesLoginWindow(_svc) { Owner = this }.ShowDialog());
+        Item("", "Proxy and VPN profiles…", () => new ProxyProfilesWindow(_svc) { Owner = this }.ShowDialog());
+        Item("", "Download history…", () => new HistoryWindow(_svc) { Owner = this }.ShowDialog());
         menu.Items.Add(new Separator());
-        Item("Show or hide drop target", () => ((App)Application.Current).ToggleDropTarget());
-        Item("Options…", () => new OptionsWindow(_svc) { Owner = this }.ShowDialog());
+        Item("", "Show or hide drop target", () => ((App)Application.Current).ToggleDropTarget());
+        Item("", "Options…", () => new OptionsWindow(_svc) { Owner = this }.ShowDialog());
         menu.IsOpen = true;
     }
 
@@ -144,16 +151,6 @@ public partial class MainWindow : Window
     void CopyAddress_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.SelectedItems.Count > 0) Clipboard.SetText(string.Join(Environment.NewLine, _vm.SelectedItems.Select(i => i.Url)));
-    }
-
-    void List_SizeChanged(object sender, SizeChangedEventArgs e) => FitNameColumn();
-
-    /// <summary>The Name column takes the spare width; the others keep theirs.</summary>
-    void FitNameColumn()
-    {
-        if (List.View is not GridView gv) return;
-        var others = gv.Columns.Where(c => c != NameCol).Sum(c => c.ActualWidth > 0 ? c.ActualWidth : c.Width);
-        NameCol.Width = Math.Max(120, List.ActualWidth - others - 48);
     }
 
     // ---------------------------------------------------------------- keyboard + window chrome

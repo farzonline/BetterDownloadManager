@@ -33,12 +33,14 @@
       button.style.cssText = '';
       button.style.position = 'fixed';
       button.style.zIndex = '2147483647';
-      button.style.padding = '6px 10px';
+      button.style.padding = '7px 12px';
       button.style.font = '13px system-ui, sans-serif';
       button.style.color = '#fff';
-      button.style.background = '#16a34a';
+      button.style.background = 'linear-gradient(135deg, #6d5df6, #4f46e5)';
       button.style.border = 'none';
-      button.style.borderRadius = '6px';
+      button.style.borderRadius = '10px';
+      button.style.boxShadow = '0 4px 14px rgba(79, 70, 229, 0.5)';
+      button.style.fontWeight = '600';
       button.style.cursor = 'pointer';
       button.style.opacity = '0.92';
       button.addEventListener('click', function (e) {

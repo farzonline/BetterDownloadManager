@@ -6,7 +6,7 @@ using Microsoft.Win32;
 
 namespace BDM.App.Services;
 
-/// <summary>Voltage (dark) / Daylight (light) from the theme-studio tokens; "System" follows the Windows app mode live.</summary>
+/// <summary>Nightfall (dark) / Daybreak (light), BDM's own theme (Themes/bdm.tokens.json); "System" follows the Windows app mode live.</summary>
 public static class ThemeManager
 {
     const string Base = "pack://application:,,,/BDM.App;component/Themes/";
@@ -29,10 +29,12 @@ public static class ThemeManager
         _mode = mode;
         var dark = mode == "Dark" || (mode != "Light" && SystemPrefersDark());
         var merged = Application.Current.Resources.MergedDictionaries;
-        var theme = new ResourceDictionary { Source = new Uri(Base + (dark ? "Voltage.xaml" : "Daylight.xaml")) };
+        var theme = new ResourceDictionary { Source = new Uri(Base + (dark ? "Nightfall.xaml" : "Daybreak.xaml")) };
         if (merged.Count == 0)
         {
             merged.Add(theme);
+            merged.Add(new ResourceDictionary { Source = new Uri(Base + "Brand.xaml") });
+            merged.Add(new ResourceDictionary { Source = new Uri(Base + "Art.xaml") });
             merged.Add(new ResourceDictionary { Source = new Uri(Base + "Controls.xaml") });
         }
         else merged[0] = theme;

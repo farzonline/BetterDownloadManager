@@ -19,5 +19,9 @@ public partial class HistoryWindow : Window
         Loaded += (_, _) => SearchBox.Focus();
     }
 
-    void UpdateCount(HistoryViewModel vm) => CountText.Text = vm.Results.Count == 1 ? "1 download" : $"{vm.Results.Count:N0} downloads";
+    void UpdateCount(HistoryViewModel vm)
+    {
+        CountText.Text = vm.Results.Count == 1 ? "1 download" : $"{vm.Results.Count:N0} downloads";
+        Empty.Visibility = vm.Results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
 }

@@ -14,7 +14,7 @@ public partial class QualityPickerDialog : Window
         InitializeComponent();
         ThemeManager.Attach(this);
         Icon = AppIcon.Image();
-        Subtitle.Text = title;
+        Header.Subtitle = title;
         List.ItemsSource = choices;
         List.SelectedIndex = 0; // best quality first
         Loaded += (_, _) => List.Focus();
