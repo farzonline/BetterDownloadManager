@@ -15,9 +15,16 @@ export function dedupeKey(url) {
   }
 }
 
+const frameKey = (u) => { try { const x = new URL(u); return x.origin + x.pathname; } catch { return u; } };
+
 export function createRegistry({ onChange } = {}) {
   const tabs = new Map(); // tabId -> Map(dedupeKey -> item)
+  const drmFrames = new Map(); // tabId -> Set of frame keys that used encrypted media ('*' = the whole tab)
   let seq = 0;
+  const frameIsProtected = (tabId, item) => {
+    const set = drmFrames.get(tabId);
+    return !!set && (set.has('*') || (!!item.frameUrl && set.has(frameKey(item.frameUrl))));
+  };
 
   const bucket = (tabId) => {
     if (!tabs.has(tabId)) tabs.set(tabId, new Map());
@@ -31,12 +38,18 @@ export function createRegistry({ onChange } = {}) {
       const key = dedupeKey(item.url);
       const existing = b.get(key);
       if (existing) {
-        // Signed URLs expire: keep the newest URL and headers; DRM is sticky.
-        const merged = { ...existing, ...item, id: existing.id, protected: existing.protected || item.protected };
+        // Signed URLs expire: keep the newest URL, but merge rather than replace: the network layer sees request headers
+        // (Cookie) that the page layer cannot, and a later report must not erase them. DRM is sticky.
+        const known = Object.fromEntries(Object.entries(item).filter(([, v]) => v !== undefined));
+        const merged = {
+          ...existing, ...known, headers: { ...existing.headers, ...item.headers }, id: existing.id,
+          protected: existing.protected || item.protected || frameIsProtected(tabId, item) || undefined,
+        };
         b.set(key, merged);
         return { item: merged, isNew: false };
       }
       const created = { ...item, id: String(++seq) };
+      if (frameIsProtected(tabId, item)) created.protected = true;
       b.set(key, created);
       onChange?.(tabId, b.size);
       return { item: created, isNew: true };
@@ -45,13 +58,16 @@ export function createRegistry({ onChange } = {}) {
     get: (tabId, id) => [...(tabs.get(tabId)?.values() ?? [])].find((i) => i.id === id),
     clear(tabId) {
       tabs.delete(tabId);
+      drmFrames.delete(tabId);
       onChange?.(tabId, 0);
     },
     /** Flags DRM for the items found in one frame (matched by origin + path; the fragment is ignored). */
     markProtected(tabId, frameUrl) {
-      const norm = (u) => { try { const x = new URL(u); return x.origin + x.pathname; } catch { return u; } };
+      const key = frameUrl ? frameKey(frameUrl) : '*';
+      if (!drmFrames.has(tabId)) drmFrames.set(tabId, new Set());
+      drmFrames.get(tabId).add(key); // also covers items that are reported later
       for (const it of tabs.get(tabId)?.values() ?? []) {
-        if (!frameUrl || (it.frameUrl && norm(it.frameUrl) === norm(frameUrl))) it.protected = true;
+        if (key === '*' || (it.frameUrl && frameKey(it.frameUrl) === key)) it.protected = true;
       }
     },
     /** Restores a persisted list (service workers lose memory when they sleep). */

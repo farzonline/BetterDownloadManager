@@ -1,0 +1,70 @@
+# Better Download Manager
+
+A personal download manager for Windows in the style of Internet Download Manager, with a browser extension that
+catches the video streams other tools miss. Built from public specs (HTTP, FTP, HLS, DASH, Chrome extensions) and
+open-source behavior; no code from any commercial product.
+
+## What it does
+
+- **Fast downloads**: several connections per file, dynamic splitting, resume after a restart or a dropped link,
+  retries, speed limit (total and per download), checksum check, duplicate warning.
+- **Queues and schedule**: several queues with their own limits and time windows (overnight works), and an action
+  when a queue finishes (sleep, hibernate, shut down).
+- **Everything IDM-style**: categories, batch downloads (`photo[001-120].jpg`), site grabber, site logins, FTP/FTPS,
+  proxies, drag-and-drop target, clipboard offers, tray icon, history search, settings export/import.
+- **Browser extension** (Chrome, Edge, Brave and other Chromium browsers): takes over big downloads, adds a
+  *Download this video* button, a popup listing every video found on the page, and a *Download this page with yt-dlp* button.
+- **Stream catcher**: HLS and DASH (including AES-128 encrypted HLS, separate video/audio tracks, live HLS), found by
+  five layers: network responses, the page's own fetch/XHR/MediaSource calls, the page's video elements, iframes and
+  service workers, and an optional per-site deep scan.
+- **Extras**: yt-dlp for video pages, subtitles and thumbnails, proxy/VPN profiles (Surfshark's manual proxies),
+  auto-resume after a network change or sleep, a local `bdm` command and API.
+
+## Not possible, on purpose
+
+DRM-protected video (Widevine, PlayReady, FairPlay) is detected and refused. BDM never tries to get around it.
+
+## Install
+
+1. Run `tools\build-release.ps1` (needs the .NET 8 SDK, Node 22+, and Inno Setup: `winget install JRSoftware.InnoSetup`).
+   Put `ffmpeg.exe` and `ffprobe.exe` (and optionally `yt-dlp.exe`) in `installer\vendor\` first to bundle them, or
+   have them on your PATH / set their paths in *Options*.
+2. Run `dist\BDM-Setup.exe`. It installs for your user only (no administrator rights).
+3. In Chrome/Edge/Brave open `chrome://extensions`, switch on *Developer mode*, choose *Load unpacked* and pick
+   the `extension` folder inside the install folder (the installer shows the path).
+
+## The `bdm` command
+
+```
+bdm add <url>        queue a download
+bdm list [--json]    show all downloads
+bdm status <id>      show one download
+bdm pause <id>       pause it
+bdm resume <id>      resume it
+```
+
+The app listens on `127.0.0.1` only, behind a secret token kept in your own data folder. Turn it off in *Options*.
+
+## Build and test
+
+```
+dotnet build
+dotnet test                      # engine, host, app view models
+node --test extension/test/      # extension logic
+cd tests/e2e && npm install && npx playwright-core install chromium && npm test   # real-browser acceptance tests
+```
+
+The browser tests prove detection on every stream *shape* built locally. Whether a particular website works can only
+be shown on that website: see `docs/corpus-sites.md`.
+
+## Layout
+
+| Folder | What |
+|---|---|
+| `src/BDM.Core` | download engine, streams (HLS/DASH), proxies, API; no UI |
+| `src/BDM.App` | the Windows app (WPF, house style from the theme tokens) |
+| `src/BDM.Host` | native messaging host the extension talks to |
+| `src/BDM.Cli` | the `bdm` command |
+| `extension/` | the Chromium extension (Manifest V3, plain JavaScript) |
+| `tests/` | unit/integration tests and the browser acceptance suite |
+| `docs/superpowers/` | design and implementation plan |

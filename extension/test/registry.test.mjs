@@ -81,3 +81,32 @@ test('markProtected flags only the matching frame\'s items', () => {
   r.markProtected(1, 'https://f/one#zzz');
   assert.deepEqual(r.list(1).map((i) => !!i.protected), [true, false]);
 });
+
+test('a later report with fewer headers does not erase the headers already captured (the cookie that unlocks a signed url)', () => {
+  const r = createRegistry();
+  r.add(1, item('https://x/a.mpd?exp=1&sig=ok', { kind: 'dash', headers: { Cookie: 'sessionid=abc', Referer: 'https://p/1' } }));
+  r.add(1, item('https://x/a.mpd?exp=2&sig=ok', { kind: 'dash', headers: { Referer: 'https://p/2' }, size: undefined, title: undefined }));
+  const [it] = r.list(1);
+  assert.equal(it.url, 'https://x/a.mpd?exp=2&sig=ok'); // newest signed url
+  assert.equal(it.headers.Cookie, 'sessionid=abc'); // survives
+  assert.equal(it.headers.Referer, 'https://p/2'); // newest value wins per header
+  assert.equal(it.title, 't'); // an undefined field never erases a known one
+});
+
+test('an item reported after its frame signalled DRM is protected from the start', () => {
+  const r = createRegistry();
+  r.markProtected(1, 'https://site/page#x'); // EME was set up first
+  r.add(1, item('https://site/m.mpd', { kind: 'dash', frameUrl: 'https://site/page' }));
+  r.add(1, item('https://site/other.mpd', { kind: 'dash', frameUrl: 'https://elsewhere/frame' }));
+  assert.deepEqual(r.list(1).map((i) => !!i.protected), [true, false]);
+});
+
+test('a drm signal without a frame url protects everything in the tab, including later items; clear forgets it', () => {
+  const r = createRegistry();
+  r.markProtected(2, undefined);
+  r.add(2, item('https://site/m.mpd', { kind: 'dash', frameUrl: 'https://any/' }));
+  assert.equal(r.list(2)[0].protected, true);
+  r.clear(2);
+  r.add(2, item('https://site/m2.mpd', { kind: 'dash', frameUrl: 'https://any/' }));
+  assert.equal(!!r.list(2)[0].protected, false);
+});

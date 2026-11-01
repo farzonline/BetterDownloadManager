@@ -1,0 +1,7 @@
+{
+  "name": "bdm-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test --test-concurrency=1 --test-timeout=150000 catcher.spec.mjs download.spec.mjs" },
+  "devDependencies": { "playwright-core": "1.49.1" }
+}
