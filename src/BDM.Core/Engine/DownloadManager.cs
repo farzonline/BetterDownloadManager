@@ -218,8 +218,10 @@ public class DownloadManager
                 var path = await streams.DownloadAsync(rec.Stream, rec.StreamChoice!, rec.Request.DestinationDir,
                     new SyncProgress(p => Update(id, r => r with { Downloaded = p.Downloaded }, persist: false)), ct, StreamOptions);
                 var length = new FileInfo(path).Length;
-                Update(id, r => r with { State = DownloadState.Completed, Downloaded = length, Total = length, FilePath = path, Error = null }, persist: true);
+                // Mark the batch BEFORE the state flips: a sibling's finish-check must never see this download as
+                // done without also seeing the flag, or the post-action could fire twice.
                 lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = path; }
+                Update(id, r => r with { State = DownloadState.Completed, Downloaded = length, Total = length, FilePath = path, Error = null }, persist: true);
                 return;
             }
             var http = _httpFor(rec.Request.ProxyProfileId);
@@ -236,8 +238,8 @@ public class DownloadManager
                 Update(id, r => r with { State = DownloadState.Failed, Failure = DownloadFailure.ServerChanged, Error = "Checksum mismatch: the file does not match the expected SHA-256.", FilePath = result.Path }, persist: true);
                 return;
             }
+            lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = result.Path; } // before the state flips, see above
             Update(id, r => r with { State = DownloadState.Completed, Downloaded = result.Bytes, Total = result.Bytes, FilePath = result.Path, Error = null }, persist: true);
-            lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = result.Path; }
         }
         catch (OperationCanceledException)
         {

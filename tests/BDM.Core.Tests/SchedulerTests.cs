@@ -152,4 +152,20 @@ public class SchedulerTests
         await Task.Delay(300);
         Assert.Equal(new[] { "shutdown" }, power.Calls);
     }
+
+    [Fact]
+    public async Task Manager_QueueFinished_ConcurrentCompletions_FirePostActionExactlyOnce()
+    {
+        await using var s = TestServer.Start(2_000);
+        for (var round = 0; round < 25; round++)
+        {
+            var (m, dir) = Make(Q(null, null, PostAction.Shutdown));
+            var power = new FakePower();
+            m.PowerApi = power;
+            var ids = Enumerable.Range(0, 4).Select(i => m.Add(Req(s, Path.Combine(dir, $"d{i}")))).ToList();
+            foreach (var id in ids) await WaitFor(m, id, r => r.State == DownloadState.Completed);
+            await Task.Delay(60);
+            Assert.True(power.Calls.Count == 1, $"round {round}: post-action ran {power.Calls.Count} times");
+        }
+    }
 }
