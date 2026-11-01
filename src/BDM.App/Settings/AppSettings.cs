@@ -17,7 +17,14 @@ public class AppSettings
     public string? FfmpegPath { get; set; }
     public string? YtDlpPath { get; set; }
     public bool MinimizeToTray { get; set; } = true;
+    /// <summary>Copying a download link opens the download dialog.</summary>
     public bool WatchClipboard { get; set; } = true;
+    /// <summary>Add URL starts with the copied link filled in.</summary>
+    public bool PasteLinkOnAdd { get; set; } = true;
+    /// <summary>Ask for name, folder and description before each download from the browser (IDM's "Download File Info").</summary>
+    public bool ShowDownloadDialog { get; set; } = true;
+    /// <summary>Open a progress window for each download started from the download dialog.</summary>
+    public bool ShowProgressWindow { get; set; } = true;
     public bool StartWithWindows { get; set; }
     /// <summary>Lets the `bdm` command-line tool and scripts control the app through a token-protected loopback API (needs a restart).</summary>
     public bool EnableLocalApi { get; set; } = true;

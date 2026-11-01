@@ -34,6 +34,39 @@ test('cookie_header_attached_for_item_url_in_host_message', async () => {
   assert.equal(m.pageUrl, 'https://p/');
 });
 
+test('the browser User-Agent is passed along unless the request already carried one', async () => {
+  const m = await buildMessage({ kind: 'video', url: 'https://cdn/v.mp4', headers: {} }, { cookies, userAgent: 'UA/1' });
+  assert.equal(m.headers['User-Agent'], 'UA/1');
+  const kept = await buildMessage({ kind: 'video', url: 'https://cdn/v.mp4', headers: { 'User-Agent': 'seen' } }, { cookies, userAgent: 'UA/1' });
+  assert.equal(kept.headers['User-Agent'], 'seen');
+});
+
+test('a referrer that is not a web address (about:client) is dropped', async () => {
+  const m = await buildMessage({ kind: 'file', url: 'https://cdn/v.mp4', pageUrl: 'about:client', headers: { Referer: 'about:client' } }, { cookies });
+  assert.equal(m.headers.Referer, undefined);
+  assert.equal(m.pageUrl, undefined);
+});
+
+import { deliver } from '../src/host.js';
+
+test('deliver: when the site refuses BDM, the browser downloads the file and takeover leaves that download alone', async () => {
+  const calls = [];
+  const r = await deliver({ op: 'add', url: 'https://cdn/v.mp4' }, {
+    send: async () => ({ ok: false, useBrowser: true, error: 'refused' }),
+    download: async (o) => calls.push(['download', o.url]),
+    skipTakeover: (url) => calls.push(['skip', url]),
+  });
+  assert.deepEqual(r, { ok: true, viaBrowser: true });
+  assert.deepEqual(calls, [['skip', 'https://cdn/v.mp4'], ['download', 'https://cdn/v.mp4']]);
+});
+
+test('deliver: an ordinary failure or success is passed through untouched', async () => {
+  const download = async () => assert.fail('must not download');
+  assert.deepEqual(await deliver({ op: 'add', url: 'u' }, { send: async () => ({ ok: true }), download, skipTakeover() {} }), { ok: true });
+  assert.deepEqual(await deliver({ op: 'add', url: 'u' }, { send: async () => ({ ok: false, error: 'BDM not running' }), download, skipTakeover() {} }),
+    { ok: false, error: 'BDM not running' });
+});
+
 test('captured Cookie request header wins over the cookie jar', async () => {
   const m = await buildMessage({ kind: 'video', url: 'https://cdn/v.mp4', headers: { Cookie: 'captured=1' } }, { cookies });
   assert.equal(m.cookie, 'captured=1');

@@ -58,6 +58,37 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public void StopAll_PausesEverything_AndStartQueue_ResumesIt()
+    {
+        var (vm, m, _, _) = Make();
+        Fill(vm);
+        vm.StopAllCommand.Execute(null);
+        Assert.All(m.All(), r => Assert.Equal(DownloadState.Paused, r.State));
+        vm.StartQueueCommand.Execute(null);
+        Assert.All(m.All(), r => Assert.Equal(DownloadState.Queued, r.State));
+    }
+
+    [Fact]
+    public void DeleteCompleted_ClearsFinishedRows_AndKeepsTheirFiles()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        var file = Path.Combine(dir, "done.zip");
+        File.WriteAllText(file, "x");
+        var store = new DownloadStore(Path.Combine(dir, "bdm.db"));
+        store.SaveQueue(new QueueDefinition("main", "Main", 0, 4, null, null, PostAction.None));
+        var req = new DownloadRequest(new Uri("https://x.example/done.zip"), null, null, new Dictionary<string, string>(), null, null, null, dir);
+        store.Upsert(new DownloadRecord(Guid.NewGuid(), req, DownloadState.Completed, 1, 1, null, "main", DateTime.UtcNow, FilePath: file));
+        var m = new DownloadManager(store, _ => new HttpClient());
+        var vm = new MainViewModel(m, new AppSettings(), new FakeShell(), a => a());
+        vm.AddUrl("https://x.example/still-going.zip");
+
+        vm.DeleteCompletedCommand.Execute(null);
+
+        Assert.Equal("still-going.zip", Assert.Single(vm.Items).Name);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
     public void AddUrl_RejectsNonDownloadableAddresses()
     {
         var (vm, _, _, _) = Make();
@@ -248,7 +279,8 @@ public class MainViewModelTests
     {
         var req = new DownloadRequest(new Uri("https://x/a.zip"), null, null, new Dictionary<string, string>(), null, null, "Compressed", ".");
         DownloadRecord Rec(DownloadFailure f, string e) => new(Guid.NewGuid(), req, DownloadState.Failed, 0, null, e, "main", DateTime.UtcNow, Failure: f);
-        Assert.Contains("expired", new DownloadItemViewModel(Rec(DownloadFailure.AuthExpired, "403"), DateTimeOffset.Now).StatusText, StringComparison.OrdinalIgnoreCase);
+        // A 403 is often bot protection, not an old link: say what happened and what to do, without guessing why.
+        Assert.Contains("refused", new DownloadItemViewModel(Rec(DownloadFailure.AuthExpired, "403"), DateTimeOffset.Now).StatusText, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DRM", new DownloadItemViewModel(Rec(DownloadFailure.Protected, "x"), DateTimeOffset.Now).StatusText);
         Assert.Contains("disk", new DownloadItemViewModel(Rec(DownloadFailure.DiskFull, "x"), DateTimeOffset.Now).StatusText, StringComparison.OrdinalIgnoreCase);
         Assert.StartsWith("Failed", new DownloadItemViewModel(Rec(DownloadFailure.Network, "boom"), DateTimeOffset.Now).StatusText);

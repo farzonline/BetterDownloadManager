@@ -4,6 +4,10 @@ namespace BDM.Core.Net;
 
 public static class HttpClients
 {
+    /// <summary>Sent when the browser extension did not pass its own; many video CDNs refuse requests without one.</summary>
+    public const string BrowserUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+
     /// <summary>HttpClient for downloads, optionally routed through a proxy profile (null = direct/system proxy).</summary>
     public static HttpClient Create(ProxyProfile? profile, CredentialVault vault)
     {
@@ -26,6 +30,9 @@ public static class HttpClients
             };
             handler.UseProxy = true;
         }
-        return new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromSeconds(100) };
+        var http = new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromSeconds(100) };
+        // A request's own User-Agent header (from the browser) wins: default headers only fill in what is missing.
+        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+        return http;
     }
 }

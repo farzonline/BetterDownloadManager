@@ -108,6 +108,16 @@ public class ProxyTests
     }
 
     [Fact]
+    public void Create_SendsABrowserUserAgentByDefault()
+    {
+        // Video CDNs answer 403 to requests without a browser User-Agent (seen on a real vdcdn.xyz link).
+        using var http = HttpClients.Create(null, new CredentialVault(Path.Combine(Tmp(), "v.json")));
+        var ua = http.DefaultRequestHeaders.UserAgent.ToString();
+        Assert.StartsWith("Mozilla/5.0 (Windows NT 10.0; Win64; x64)", ua);
+        Assert.Contains("Chrome/", ua);
+    }
+
+    [Fact]
     public async Task Create_Socks5Profile_RoutesThroughLocalFakeProxy()
     {
         await using var server = TestServer.Start(30_000);

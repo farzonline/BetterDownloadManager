@@ -1,7 +1,7 @@
 import { createRegistry } from './detect/registry.js';
 import { createNetworkDetector } from './detect/network.js';
 import { DEFAULT_SETTINGS, takeOverDownload } from './takeover.js';
-import { buildMessage, buildPageMessage, sendToHost } from './host.js';
+import { buildMessage, buildPageMessage, deliver, sendToHost } from './host.js';
 import { handlePageMessage, pickBest } from './detect/page.js';
 import { createSiteSettings, hostKey, withSiteOverrides } from './siteSettings.js';
 import { createDebuggerFallback } from './detect/debugger-fallback.js';
@@ -70,6 +70,9 @@ chrome.tabs.onUpdated.addListener((id, change, tab) => {
 });
 chrome.tabs.onRemoved.addListener((id) => { deep?.onTabRemoved(id); tabs.delete(id); registry.clear(id); chrome.storage.session.remove(`tab:${id}`).catch(() => {}); });
 
+// Hands a found file to BDM, or to the browser itself when the site refuses BDM (see deliver).
+const send = (msg) => deliver(msg, { download: (o) => chrome.downloads.download(o), skipTakeover: (url) => altClicks.set(url, Date.now()) });
+
 const notify = (message) =>
   chrome.notifications.create({ type: 'basic', iconUrl: 'icon.png', title: 'Better Download Manager', message }).catch(() => {});
 
@@ -80,6 +83,7 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
         settings: withSiteOverrides(await getSettings(), hostKey(item.finalUrl || item.url), await siteSettings.get(item.finalUrl || item.url)),
         altRecent: (url) => Date.now() - (altClicks.get(url) ?? 0) < ALT_WINDOW_MS,
         sendToHost,
+        lookup: (url) => registry.find(url),
         buildMessage: (i) => buildMessage(i, { cookies: chrome.cookies }),
         cancel: (id) => chrome.downloads.cancel(id),
         erase: (id) => chrome.downloads.erase({ id }),
@@ -100,12 +104,11 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     if (msg.type === 'has-items') return { has: !!pickBest(registry.list(sender.tab?.id ?? -1)) };
     if (msg.type === 'download-best') {
       const item = pickBest(registry.list(sender.tab?.id ?? -1));
-      if (!item) { notify('No downloadable video found on this page yet.'); return { ok: false }; }
+      if (!item) return { ok: false, error: 'No downloadable video found on this page yet.' };
       try {
-        const r = await sendToHost(await buildMessage(item, { cookies: chrome.cookies }));
-        if (!r.ok) notify(r.error ?? 'BDM is not available.');
-        return r;
-      } catch (e) { notify(String(e.message ?? e)); return { ok: false }; }
+        const r = await send(await buildMessage(item, { cookies: chrome.cookies }));
+        return r.ok ? r : { ok: false, error: r.error ?? 'BDM is not available.' };
+      } catch (e) { return { ok: false, error: String(e.message ?? e) }; }
     }
     if (msg.type === 'list') return { items: registry.list(msg.tabId) };
     if (msg.type === 'debug-registry') return registry.snapshot(); // used by the acceptance tests
@@ -117,7 +120,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       const item = registry.get(msg.tabId, msg.itemId);
       if (!item) return { ok: false, error: 'That item is no longer available.' };
       try {
-        return await sendToHost(await buildMessage(item, { cookies: chrome.cookies, askQuality: !!msg.ask }));
+        return await send(await buildMessage(item, { cookies: chrome.cookies, askQuality: !!msg.ask }));
       } catch (e) { return { ok: false, error: String(e.message ?? e) }; }
     }
     return {};
@@ -142,7 +145,7 @@ async function sendMany(tab, urls) {
   const unique = [...new Set(urls)].slice(0, MAX_BULK);
   for (const url of unique) {
     const msg = await buildMessage({ kind: 'file', url, pageUrl: tab.url, title: tab.title, headers: tab.url ? { Referer: tab.url } : {} }, { cookies: chrome.cookies });
-    const r = await sendToHost(msg);
+    const r = await send(msg);
     if (!r.ok) { notify(r.error ?? 'BDM is not available.'); return; }
   }
   notify(`Sent ${unique.length} item(s) to BDM.`);
@@ -152,8 +155,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'bdm-link') {
     const url = info.linkUrl ?? info.srcUrl;
     if (!url) return;
-    const r = await sendToHost(await buildMessage({ kind: 'file', url, pageUrl: tab?.url, title: tab?.title, headers: tab?.url ? { Referer: tab.url } : {} }, { cookies: chrome.cookies }));
+    const r = await send(await buildMessage({ kind: 'file', url, pageUrl: tab?.url, title: tab?.title, headers: tab?.url ? { Referer: tab.url } : {} }, { cookies: chrome.cookies }));
     if (!r.ok) notify(r.error ?? 'BDM is not available.');
+    else if (r.viaBrowser) notify('This site only lets your browser download the file, so the browser is downloading it.');
     return;
   }
   const func = info.menuItemId === 'bdm-all-links' ? collect('a[href]', 'href') : collect('img[src],video[src],audio[src],source[src]', 'src');

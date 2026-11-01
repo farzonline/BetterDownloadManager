@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using BDM.App.Services;
@@ -17,6 +19,9 @@ public partial class MainWindow : Window
     readonly AppSettings _settings;
     readonly AppServices _svc;
     readonly Dictionary<Guid, DownloadState> _lastStates = new();
+    readonly Dictionary<Guid, ProgressDialog> _progress = new();
+    AddUrlDialog? _openAdd;
+    GridLength _treeWidth = new(230);
 
     /// <summary>Raised on the UI thread when a download finishes (the app shows a tray notification if the window is hidden).</summary>
     public event Action<string>? DownloadCompleted;
@@ -29,7 +34,7 @@ public partial class MainWindow : Window
         var manager = _manager = svc.Manager;
         _settings = svc.Settings;
         DataContext = vm;
-        Crest.Source = AppIcon.Image();
+        Crest.Source = AppIcon.Image(32);
         Icon = AppIcon.Image();
         ThemeManager.Attach(this);
 
@@ -41,11 +46,17 @@ public partial class MainWindow : Window
 
     // ---------------------------------------------------------------- add / remove
 
+    /// <summary>The download dialog (IDM's "Download File Info"). One at a time: a second copied link while it is open is ignored.</summary>
     public async void ShowAddDialog(string? initialUrl)
     {
-        if (!IsVisible) { Show(); }
-        var dlg = new AddUrlDialog(_svc.Clients.Get(null), _settings, initialUrl, _svc.Clients.Choices("Use the default")) { Owner = this };
-        if (dlg.ShowDialog() != true) return;
+        if (_openAdd != null) { _openAdd.Activate(); return; }
+        var proposal = initialUrl != null && DownloadPlan.LinkFrom(initialUrl) is { } u ? DownloadPlan.Propose(u, _settings) : null;
+        var dlg = new AddUrlDialog(_svc.Clients.Get(null), _settings, initialUrl, _svc.Clients.Choices("Use the default"), proposal);
+        DialogPlacement.Place(dlg);
+        _openAdd = dlg;
+        bool ok;
+        try { ok = dlg.ShowDialog() == true; } finally { _openAdd = null; }
+        if (!ok) return;
         try
         {
             if (dlg.UseYtDlp)
@@ -54,10 +65,23 @@ public partial class MainWindow : Window
                 if (!reply.Ok) ShowBanner(reply.Error ?? "yt-dlp couldn't use that page.", error: true);
                 return;
             }
-            var id = _vm.AddUrl(dlg.Url, dlg.ProxyProfileId);
-            if (!dlg.StartNow) _manager.Pause(id);
+            var plan = dlg.Plan!;
+            var id = _vm.Add(plan);
+            if (plan.StartNow) ShowProgress(id);
         }
         catch (ArgumentException e) { ShowBanner(e.Message, error: true); }
+    }
+
+    /// <summary>The download's own progress window (one per download, as in IDM), if the owner wants them.</summary>
+    public void ShowProgress(Guid id, bool always = false)
+    {
+        if (!always && !_settings.ShowProgressWindow) return;
+        if (_progress.TryGetValue(id, out var open)) { open.Activate(); return; }
+        if (_manager.Get(id) == null) return;
+        var w = new ProgressDialog(_manager, id);
+        _progress[id] = w;
+        w.Closed += (_, _) => _progress.Remove(id);
+        w.Show();
     }
 
     void ConfirmRemove()
@@ -93,9 +117,8 @@ public partial class MainWindow : Window
 
     void BannerClose_Click(object sender, RoutedEventArgs e) => Banner.Visibility = Visibility.Collapsed;
 
-    /// <summary>A link on the clipboard that looks like a file: offer it without stealing focus.</summary>
-    public void OfferClipboardUrl(Uri url) =>
-        ShowBanner($"Link copied: {Categories.NameFromUrl(url)}", error: false, ("Download", () => ShowAddDialog(url.ToString())));
+    /// <summary>A download link was copied somewhere: open the download dialog for it (IDM's clipboard catching).</summary>
+    public void OfferClipboardUrl(Uri url) => ShowAddDialog(url.ToString());
 
     void OnRecordChanged(DownloadRecord r)
     {
@@ -104,36 +127,57 @@ public partial class MainWindow : Window
         if (r.State != DownloadState.Completed || was == DownloadState.Completed) return;
         var name = r.FilePath != null ? Path.GetFileName(r.FilePath) : Categories.NameFromUrl(r.Request.Url);
         DownloadCompleted?.Invoke(name);
-        if (!IsVisible) return;
+        if (!IsVisible || _progress.ContainsKey(r.Id)) return; // its own window already says so
         var path = r.FilePath;
         ShowBanner($"{name} is complete", false,
             ("Open", () => { if (path != null) new ExplorerShell().Open(path); }),
             ("Show in folder", () => { if (path != null) new ExplorerShell().ShowInFolder(path); }));
     }
 
-    // ---------------------------------------------------------------- more menu
+    // ---------------------------------------------------------------- menu and toolbar
 
-    void More_Click(object sender, RoutedEventArgs e)
+    void Open(Window w) { w.Owner = this; w.ShowDialog(); }
+    void Batch_Click(object sender, RoutedEventArgs e) => Open(new BatchWindow(_vm));
+    void Grabber_Click(object sender, RoutedEventArgs e) => Open(new GrabberWindow(_svc));
+    void Queues_Click(object sender, RoutedEventArgs e) => Open(new QueuesWindow(_svc));
+    void Logins_Click(object sender, RoutedEventArgs e) => Open(new SitesLoginWindow(_svc));
+    void Proxy_Click(object sender, RoutedEventArgs e) => Open(new ProxyProfilesWindow(_svc));
+    void History_Click(object sender, RoutedEventArgs e) => Open(new HistoryWindow(_svc));
+    void Options_Click(object sender, RoutedEventArgs e) => Open(new OptionsWindow(_svc));
+    void DropTarget_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).ToggleDropTarget();
+    void Exit_Click(object sender, RoutedEventArgs e) => ((App)Application.Current).ExitApp();
+
+    void ShowProgress_Click(object sender, RoutedEventArgs e)
     {
-        var menu = new ContextMenu { PlacementTarget = MoreButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
-        void Item(string glyph, string header, Action act)
-        {
-            var icon = new TextBlock { Text = glyph, Style = (Style)FindResource("Text.MenuIcon") };
-            var mi = new MenuItem { Header = header, Icon = icon };
-            mi.Click += (_, _) => act();
-            menu.Items.Add(mi);
-        }
-        Item("", "Batch download…", () => new BatchWindow(_vm) { Owner = this }.ShowDialog());
-        Item("", "Site grabber…", () => new GrabberWindow(_svc) { Owner = this }.ShowDialog());
-        menu.Items.Add(new Separator());
-        Item("", "Queues and schedule…", () => new QueuesWindow(_svc) { Owner = this }.ShowDialog());
-        Item("", "Site logins…", () => new SitesLoginWindow(_svc) { Owner = this }.ShowDialog());
-        Item("", "Proxy and VPN profiles…", () => new ProxyProfilesWindow(_svc) { Owner = this }.ShowDialog());
-        Item("", "Download history…", () => new HistoryWindow(_svc) { Owner = this }.ShowDialog());
-        menu.Items.Add(new Separator());
-        Item("", "Show or hide drop target", () => ((App)Application.Current).ToggleDropTarget());
-        Item("", "Options…", () => new OptionsWindow(_svc) { Owner = this }.ShowDialog());
-        menu.IsOpen = true;
+        foreach (var i in _vm.SelectedItems) ShowProgress(i.Id, always: true);
+    }
+
+    void Theme_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ThemeMode = (string)((FrameworkElement)sender).Tag;
+        ThemeManager.Apply(_settings.ThemeMode);
+        try { _settings.Save(); } catch (IOException) { /* applies for this session */ }
+    }
+
+    void ToggleCategories_Click(object sender, RoutedEventArgs e)
+    {
+        var show = TreePane.Visibility != Visibility.Visible;
+        if (!show) _treeWidth = TreeColumn.Width;
+        TreePane.Visibility = TreeSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        TreeColumn.Width = show ? _treeWidth : new GridLength(0);
+    }
+
+    void Logs_Click(object sender, RoutedEventArgs e)
+    {
+        var logs = Path.Combine(AppSettings.DataDir, "logs");
+        Directory.CreateDirectory(logs);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{logs}\"") { UseShellExecute = true });
+    }
+
+    void About_Click(object sender, RoutedEventArgs e)
+    {
+        var v = typeof(MainWindow).Assembly.GetName().Version;
+        ShowBanner($"Better Download Manager {v?.ToString(3)} · personal download manager by Farzonline. DRM-protected video is never downloaded.");
     }
 
     // ---------------------------------------------------------------- list
@@ -145,7 +189,18 @@ public partial class MainWindow : Window
     {
         if ((e.OriginalSource as DependencyObject)?.FindAncestor<ListViewItem>() == null || List.SelectedItem is not DownloadItemViewModel item) return;
         if (item.HasFile) _vm.OpenFileCommand.Execute(null);
-        else new ProgressDialog(_manager, item.Id) { Owner = this }.Show();
+        else ShowProgress(item.Id, always: true);
+    }
+
+    /// <summary>Click a column header to sort by it; click again to reverse.</summary>
+    void Header_Click(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not GridViewColumnHeader { Tag: string key }) return;
+        var view = CollectionViewSource.GetDefaultView(List.ItemsSource);
+        var dir = view.SortDescriptions is [{ } s] && s.PropertyName == key && s.Direction == ListSortDirection.Ascending
+            ? ListSortDirection.Descending : ListSortDirection.Ascending;
+        view.SortDescriptions.Clear();
+        view.SortDescriptions.Add(new SortDescription(key, dir));
     }
 
     void CopyAddress_Click(object sender, RoutedEventArgs e)
@@ -180,7 +235,7 @@ public partial class MainWindow : Window
         Root.Margin = max ? SystemParameters.WindowResizeBorderThickness : new Thickness(0);
     }
 
-    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    protected override void OnClosing(CancelEventArgs e)
     {
         if (_settings.MinimizeToTray && !App.IsExiting) { e.Cancel = true; Hide(); return; }
         base.OnClosing(e);

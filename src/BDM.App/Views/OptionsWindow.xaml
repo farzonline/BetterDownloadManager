@@ -18,10 +18,15 @@
           <ComboBoxItem Content="System"/><ComboBoxItem Content="Light"/><ComboBoxItem Content="Dark"/>
         </ComboBox>
         <CheckBox Content="Keep running in the tray when I close the window" IsChecked="{Binding MinimizeToTray}" Margin="0,12,0,0"/>
-        <CheckBox Content="Offer links I copy" IsChecked="{Binding WatchClipboard}" Margin="0,8,0,0"/>
         <CheckBox Content="Start with Windows" IsChecked="{Binding StartWithWindows}" Margin="0,8,0,0"/>
         <CheckBox Content="Ask which quality to download for streams" IsChecked="{Binding AlwaysAskQuality}" Margin="0,8,0,0"/>
         <CheckBox Content="Allow the bdm command-line tool (takes effect after a restart)" IsChecked="{Binding EnableLocalApi}" Margin="0,8,0,0"/>
+
+        <StackPanel Orientation="Horizontal" Margin="0,28,0,8"><TextBlock Text="&#xE8C8;" FontFamily="{DynamicResource Font.Icon}" FontSize="13" Foreground="{DynamicResource Brush.AccentText}" Margin="0,0,8,0" VerticalAlignment="Center"/><TextBlock Text="CATCHING LINKS" Style="{StaticResource Text.Section}" VerticalAlignment="Center"/></StackPanel>
+        <CheckBox Content="When I copy a download link, open the download dialog for it" IsChecked="{Binding WatchClipboard}"/>
+        <CheckBox Content="Fill in a copied link when I click Add URL" IsChecked="{Binding PasteLinkOnAdd}" Margin="0,8,0,0"/>
+        <CheckBox Content="Show the download dialog before a browser download starts" ToolTip="Pick the name, folder and a description first, as in IDM" IsChecked="{Binding ShowDownloadDialog}" Margin="0,8,0,0"/>
+        <CheckBox Content="Open a progress window for each download I start" IsChecked="{Binding ShowProgressWindow}" Margin="0,8,0,0"/>
 
         <StackPanel Orientation="Horizontal" Margin="0,28,0,8"><TextBlock Text="&#xE896;" FontFamily="{DynamicResource Font.Icon}" FontSize="13" Foreground="{DynamicResource Brush.AccentText}" Margin="0,0,8,0" VerticalAlignment="Center"/><TextBlock Text="DOWNLOADS" Style="{StaticResource Text.Section}" VerticalAlignment="Center"/></StackPanel>
         <TextBlock Text="Save to" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/>

@@ -10,10 +10,15 @@ open-source behavior; no code from any commercial product.
   retries, speed limit (total and per download), checksum check, duplicate warning.
 - **Queues and schedule**: several queues with their own limits and time windows (overnight works), and an action
   when a queue finishes (sleep, hibernate, shut down).
-- **Everything IDM-style**: categories, batch downloads (`photo[001-120].jpg`), site grabber, site logins, FTP/FTPS,
-  proxies, drag-and-drop target, clipboard offers, tray icon, history search, settings export/import.
+- **Everything IDM-style**: menu bar, big toolbar, category tree and sortable columns; a *download file info* dialog
+  before each download (category, save as, description, start now or later) and a progress window per download;
+  copied links open that dialog and *Add URL* fills in a copied link (both can be switched off); batch downloads
+  (`photo[001-120].jpg`), site grabber, site logins, FTP/FTPS, proxies, drag-and-drop target, tray icon, history
+  search, settings export/import.
 - **Browser extension** (Chrome, Edge, Brave and other Chromium browsers): takes over big downloads, adds a
   *Download this video* button, a popup listing every video found on the page, and a *Download this page with yt-dlp* button.
+  When a site only lets a real browser fetch a file (Cloudflare-style bot protection), the browser downloads it instead,
+  so a found file is never lost.
 - **Stream catcher**: HLS and DASH (including AES-128 encrypted HLS, separate video/audio tracks, live HLS), found by
   five layers: network responses, the page's own fetch/XHR/MediaSource calls, the page's video elements, iframes and
   service workers, and an optional per-site deep scan.

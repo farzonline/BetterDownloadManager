@@ -15,8 +15,8 @@ public static class Categories
         ["Video"] = ["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "mpg", "mpeg", "ts", "m3u8", "mpd"],
     };
 
-    /// <summary>Sidebar order: views first, then file types.</summary>
-    public static IReadOnlyList<string> Sidebar { get; } = [All, Unfinished, Finished, "Compressed", "Documents", "Music", "Programs", "Video", "Other"];
+    /// <summary>Category tree order, as in IDM: All Downloads with the file types under it, then Unfinished and Finished.</summary>
+    public static IReadOnlyList<string> Sidebar { get; } = [All, "Compressed", "Documents", "Music", "Programs", "Video", "Other", Unfinished, Finished];
 
     /// <summary>Segoe Fluent Icons code point for a sidebar entry or file type.</summary>
     public static string Glyph(string category) => category switch
@@ -52,11 +52,16 @@ public static class Categories
         return ByType.FirstOrDefault(kv => kv.Value.Contains(ext)).Key ?? "Other";
     }
 
-    public static string FolderFor(AppSettings s, string category)
-    {
-        var key = ByType.ContainsKey(category) ? category : "Other";
-        return s.CategoryFolders.TryGetValue(key, out var custom) && !string.IsNullOrWhiteSpace(custom) ? custom : Path.Combine(s.DownloadRoot, key);
-    }
+    /// <summary>File types in the order the download dialog offers them.</summary>
+    public static IReadOnlyList<string> Types { get; } = ["Compressed", "Documents", "Music", "Programs", "Video", "Other"];
+
+    static string Key(string category) => ByType.ContainsKey(category) ? category : "Other";
+
+    public static string FolderFor(AppSettings s, string category) =>
+        s.CategoryFolders.TryGetValue(Key(category), out var custom) && !string.IsNullOrWhiteSpace(custom) ? custom : Path.Combine(s.DownloadRoot, Key(category));
+
+    /// <summary>"Remember this path for the category" in the download dialog.</summary>
+    public static void Remember(AppSettings s, string category, string folder) => s.CategoryFolders[Key(category)] = folder;
 
     public static string NameFromUrl(Uri url)
     {

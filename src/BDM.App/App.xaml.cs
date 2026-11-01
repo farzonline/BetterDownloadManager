@@ -33,7 +33,7 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _instance = new SingleInstance("main");
+        _instance = new SingleInstance(PipeProtocol.PipeName); // one app per pipe: a test copy (BDM_PIPE) runs beside the real one
         if (!_instance.IsFirst)
         {
             try { await _instance.ForwardAsync(PipeProtocol.PipeName, e.Args); } catch (Exception) { /* first instance is starting up or gone */ }
@@ -68,7 +68,12 @@ public partial class App : Application
         _connectivity = new ConnectivityWatcher();
         manager.Watch(_connectivity);
 
-        _handler = new HostMessageHandler(manager, settings, new QualityPickerService());
+        _handler = new HostMessageHandler(manager, settings, new QualityPickerService(), new DownloadPromptService(settings, clients),
+            async req =>
+            {
+                using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                return await BDM.Core.Http.Prober.ProbeAsync(clients.Get(manager.ProxyIdFor(req.Category, "main")), req, limit.Token);
+            });
         _pipe = new PipeServer(PipeProtocol.PipeName, _handler.HandleAsync);
         _pipe.Start();
 
@@ -81,6 +86,7 @@ public partial class App : Application
         _window = new MainWindow(vm, _svc);
         MainWindow = _window;
         _handler.Activated += () => Dispatcher.BeginInvoke(ShowMainWindow);
+        _handler.Started += id => Dispatcher.BeginInvoke(() => _window.ShowProgress(id));
         ApplySettings(settings, manager);
         StartLocalApi(settings, manager, vm);
 
@@ -89,7 +95,7 @@ public partial class App : Application
 
         var filter = new ClipboardUrlFilter(() => settings);
         _clipboard = new ClipboardWatcher(_window, filter, () => settings.WatchClipboard);
-        _clipboard.UrlCopied += url => Dispatcher.BeginInvoke(() => { if (_window.IsVisible) _window.OfferClipboardUrl(url); });
+        _clipboard.UrlCopied += url => Dispatcher.BeginInvoke(() => _window.OfferClipboardUrl(url));
 
         // The browser host starts the app with --background so a download request doesn't pop a window up.
         if (!e.Args.Contains("--background")) _window.Show();
@@ -145,7 +151,7 @@ public partial class App : Application
         if (_drop.IsVisible) _drop.Hide(); else _drop.Show();
     }
 
-    void ExitApp()
+    public void ExitApp()
     {
         IsExiting = true;
         Dispatcher.Invoke(Shutdown);

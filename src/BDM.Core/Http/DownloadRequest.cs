@@ -10,6 +10,9 @@ public record DownloadRequest(
     string? Category,
     string DestinationDir)
 {
+    /// <summary>The owner's own note, shown in the list.</summary>
+    public string? Description { get; init; }
+
     /// <summary>Builds a request message carrying this download's Referer, Cookie and custom headers.</summary>
     public HttpRequestMessage CreateMessage(HttpMethod method)
     {

@@ -1,0 +1,169 @@
+using BDM.App.Services;
+using BDM.App.Settings;
+using BDM.App.ViewModels;
+using BDM.Core.Data;
+using BDM.Core.Engine;
+using BDM.Core.Http;
+using BDM.Core.Ipc;
+
+namespace BDM.App.Tests;
+
+/// <summary>The IDM-style "download file info" step: every new download can be named, filed and described before it starts.</summary>
+public class DownloadPlanTests
+{
+    static (DownloadManager M, AppSettings S) Engine()
+    {
+        var store = new DownloadStore(Path.Combine(Directory.CreateTempSubdirectory().FullName, "bdm.db"));
+        store.SaveQueue(new QueueDefinition("main", "Main", 0, 4, null, null, PostAction.None)); // nothing runs
+        return (new DownloadManager(store, _ => new HttpClient()), new AppSettings { DownloadRoot = Path.Combine(Path.GetTempPath(), "bdm-plan") });
+    }
+
+    sealed class Prompt(Func<DownloadPlan, DownloadPlan?> answer) : IDownloadPrompt
+    {
+        public DownloadPlan? Proposed;
+        public DownloadRequest? Template;
+        public Task<DownloadPlan?> AskAsync(DownloadPlan proposal, DownloadRequest template)
+        {
+            Proposed = proposal;
+            Template = template;
+            return Task.FromResult(answer(proposal));
+        }
+    }
+
+    static HostMessage File(string url) =>
+        new("add", url, "https://site.example/watch", "Clip", new() { ["Referer"] = "https://player.example/", ["User-Agent"] = "UA" }, "sid=1", null, null);
+
+    [Fact]
+    public void Propose_NamesFilesAndFolderFromTheAddress()
+    {
+        var (_, s) = Engine();
+        var p = DownloadPlan.Propose(new Uri("https://x.example/a/movie.mkv?sig=1"), s);
+        Assert.Equal("movie.mkv", p.SuggestedName);
+        Assert.Null(p.FileName); // automatic until the owner types a name
+        Assert.Equal("Video", p.Category);
+        Assert.Equal(Path.Combine(s.DownloadRoot, "Video"), p.Folder);
+        Assert.True(p.StartNow);
+    }
+
+    [Fact]
+    public void Remember_SetsTheCategoryFolder()
+    {
+        var (_, s) = Engine();
+        Categories.Remember(s, "Video", @"D:\Films");
+        Assert.Equal(@"D:\Films", Categories.FolderFor(s, "Video"));
+        Categories.Remember(s, "Something odd", @"D:\Misc"); // unknown categories file under Other
+        Assert.Equal(@"D:\Misc", Categories.FolderFor(s, "Other"));
+    }
+
+    [Fact]
+    public void ViewModelAdd_UsesTheOwnersNameFolderCategoryAndDescription()
+    {
+        var (m, s) = Engine();
+        var vm = new MainViewModel(m, s, new NoShell());
+        var plan = DownloadPlan.Propose(new Uri("https://x.example/file.mp4"), s) with
+        {
+            FileName = "Holiday.mp4", Folder = @"D:\Films", Category = "Video", Description = "Summer", StartNow = false,
+        };
+        var id = vm.Add(plan);
+        var r = m.Get(id)!;
+        Assert.Equal("Holiday.mp4", r.Request.FileName);
+        Assert.Equal(@"D:\Films", r.Request.DestinationDir);
+        Assert.Equal("Summer", r.Request.Description);
+        Assert.Equal(DownloadState.Paused, r.State); // "Download later"
+        Assert.Equal("Summer", Assert.Single(vm.Items).Description);
+    }
+
+    [Fact]
+    public async Task BrowserDownload_AsksFirst_AndKeepsTheBrowserHeaders()
+    {
+        var (m, s) = Engine();
+        var prompt = new Prompt(p => p with { FileName = "Mine.mp4", Description = "from the site" });
+        var h = new HostMessageHandler(m, s, new NoPicker(), prompt);
+        Guid? started = null;
+        h.Started += id => started = id;
+
+        Assert.True((await h.HandleAsync(File("https://cdn.example/file.mp4?sign=1"))).Ok);
+
+        Assert.Equal("file.mp4", prompt.Proposed!.SuggestedName);
+        Assert.Equal("https://player.example/", prompt.Template!.Referer); // the dialog probes with the browser's headers
+        var r = Assert.Single(m.All());
+        Assert.Equal("Mine.mp4", r.Request.FileName);
+        Assert.Equal("from the site", r.Request.Description);
+        Assert.Equal("UA", r.Request.Headers["User-Agent"]);
+        Assert.Equal("sid=1", r.Request.CookieHeader);
+        Assert.Equal(r.Id, started); // the app opens its progress window for it
+    }
+
+    [Fact]
+    public async Task BrowserDownload_CancelledInTheDialog_AddsNothing_ButStillAnswersOk()
+    {
+        // Ok, so the extension cancels the browser's own copy too: Cancel means "don't download this".
+        var (m, s) = Engine();
+        var h = new HostMessageHandler(m, s, new NoPicker(), new Prompt(_ => null));
+        Assert.True((await h.HandleAsync(File("https://cdn.example/file.mp4"))).Ok);
+        Assert.Empty(m.All());
+    }
+
+    [Fact]
+    public async Task BrowserDownload_WithTheDialogTurnedOff_StartsStraightAway()
+    {
+        var (m, s) = Engine();
+        s.ShowDownloadDialog = false;
+        var prompt = new Prompt(p => p);
+        var h = new HostMessageHandler(m, s, new NoPicker(), prompt);
+        Assert.True((await h.HandleAsync(File("https://cdn.example/file.mp4"))).Ok);
+        Assert.Null(prompt.Proposed);
+        Assert.Single(m.All());
+    }
+
+    [Theory]
+    [InlineData(403)]
+    [InlineData(503)]
+    public async Task BrowserDownload_TheSiteRefusesBdm_HandsItBackToTheBrowser(int status)
+    {
+        // Cloudflare-protected video CDNs refuse anything but a real browser (seen on vdcdn.xyz): let the browser fetch it.
+        var (m, s) = Engine();
+        var prompt = new Prompt(p => p);
+        DownloadRequest? probed = null;
+        var h = new HostMessageHandler(m, s, new NoPicker(), prompt, req =>
+        {
+            probed = req;
+            return status == 403
+                ? throw new DownloadException(DownloadFailure.AuthExpired, "refused")
+                : throw new HttpRequestException("busy", null, (System.Net.HttpStatusCode)status);
+        });
+
+        var reply = await h.HandleAsync(File("https://cdn.example/file.mp4"));
+
+        Assert.False(reply.Ok);
+        Assert.True(reply.UseBrowser);
+        Assert.Equal("UA", probed!.Headers["User-Agent"]); // probed as the browser would ask
+        Assert.Null(prompt.Proposed); // no dialog for a download BDM can't do
+        Assert.Empty(m.All());
+    }
+
+    [Fact]
+    public async Task BrowserDownload_AProbeThatJustTimesOut_StillQueuesIt()
+    {
+        var (m, s) = Engine();
+        var h = new HostMessageHandler(m, s, new NoPicker(), new Prompt(p => p), _ => throw new TaskCanceledException());
+        Assert.True((await h.HandleAsync(File("https://cdn.example/file.mp4"))).Ok);
+        Assert.Single(m.All());
+    }
+
+    [Fact]
+    public void ClipboardLink_AcceptsAnyWebOrFtpAddress_ForPastingIntoAddUrl()
+    {
+        Assert.Equal("https://x.example/page", DownloadPlan.LinkFrom("  https://x.example/page \r\n")!.ToString());
+        Assert.NotNull(DownloadPlan.LinkFrom("ftp://files.example/a.iso"));
+        Assert.Null(DownloadPlan.LinkFrom("hello world"));
+        Assert.Null(DownloadPlan.LinkFrom("file:///c:/x.zip"));
+        Assert.Null(DownloadPlan.LinkFrom(null));
+    }
+
+    sealed class NoShell : IShell { public void Open(string path) { } public void ShowInFolder(string path) { } }
+    sealed class NoPicker : IQualityPicker
+    {
+        public Task<BDM.Core.Streams.StreamChoice?> PickAsync(IReadOnlyList<BDM.Core.Streams.StreamChoice> choices, string title) => Task.FromResult<BDM.Core.Streams.StreamChoice?>(null);
+    }
+}

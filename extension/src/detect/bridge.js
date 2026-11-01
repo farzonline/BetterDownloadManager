@@ -17,7 +17,10 @@
       document: document,
       getSettings: function () { return chrome.storage.sync.get('settings').then(function (r) { return Object.assign({ floatingButton: true }, r.settings); }); },
       hasItems: function () { return chrome.runtime.sendMessage({ type: 'has-items' }).then(function (r) { return !!(r && r.has); }, function () { return false; }); },
-      onClick: function () { send({ type: 'download-best' }); },
+      onClick: function () {
+        try { return chrome.runtime.sendMessage({ type: 'download-best' }); }
+        catch (e) { return { ok: false, error: 'Reload the page: the extension was updated.' }; }
+      },
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();

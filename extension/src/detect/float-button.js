@@ -2,6 +2,7 @@
 (function (g) {
   'use strict';
   var BDM = (g.BDM = g.BDM || {});
+  var GRADIENT = 'linear-gradient(135deg, #6d5df6, #4f46e5)';
 
   function install(opts) {
     var doc = opts.document;
@@ -36,17 +37,40 @@
       button.style.padding = '7px 12px';
       button.style.font = '13px system-ui, sans-serif';
       button.style.color = '#fff';
-      button.style.background = 'linear-gradient(135deg, #6d5df6, #4f46e5)';
+      button.style.background = GRADIENT;
       button.style.border = 'none';
       button.style.borderRadius = '10px';
       button.style.boxShadow = '0 4px 14px rgba(79, 70, 229, 0.5)';
       button.style.fontWeight = '600';
       button.style.cursor = 'pointer';
       button.style.opacity = '0.92';
+      var label = 'Download this video';
+      var busy = false;
+      button.style.maxWidth = '320px';
+      button.style.whiteSpace = 'nowrap';
+      button.style.overflow = 'hidden';
+      button.style.textOverflow = 'ellipsis';
+      var paint = function (text, background) { button.textContent = text; button.title = text; button.style.background = background; };
       button.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.isTrusted) opts.onClick(); // a click the page made up must not start a download
+        if (!e.isTrusted || busy) return; // a click the page made up must not start a download
+        busy = true;
+        var self = button;
+        paint('Sending to BDM…', GRADIENT);
+        self.style.cursor = 'progress';
+        Promise.resolve(opts.onClick()).then(function (r) { return r || { ok: false }; }, function (err) { return { ok: false, error: String(err) }; })
+          .then(function (r) {
+            if (self !== button) return; // the button was removed meanwhile
+            if (r.ok) paint(r.viaBrowser ? '✓ Downloading in your browser' : '✓ Added to BDM', 'linear-gradient(135deg, #10b981, #059669)');
+            else paint('✕ ' + (r.error || 'BDM did not take it'), 'linear-gradient(135deg, #f43f5e, #be123c)');
+            setTimeout(function () {
+              busy = false;
+              if (self !== button) return;
+              paint(label, GRADIENT);
+              self.style.cursor = 'pointer';
+            }, opts.resetMs == null ? 3000 : opts.resetMs);
+          });
       });
       root.appendChild(button);
       (doc.body || doc.documentElement).appendChild(host);

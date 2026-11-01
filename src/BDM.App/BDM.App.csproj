@@ -10,7 +10,14 @@
     <AssemblyName>BDM.App</AssemblyName>
     <RootNamespace>BDM.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>0.2.0</Version>
+    <!-- Drawn by tools/make-icon.py. The exe's own icon is what the taskbar, Start menu and shortcuts show. -->
+    <ApplicationIcon>Assets\bdm.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\bdm.ico" LogicalName="bdm.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- WinForms is only for the tray icon; keep its names out of WPF code. -->

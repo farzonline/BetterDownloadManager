@@ -4,14 +4,15 @@ import { loadScript, FakeDocument, FakeEl } from './fakedom.mjs';
 
 const lib = () => loadScript('detect/float-button.js').BDM.floatButton;
 
-function setup({ settings = { floatingButton: true }, items = true } = {}) {
+function setup({ settings = { floatingButton: true }, items = true, reply = () => ({ ok: true }) } = {}) {
   const doc = new FakeDocument();
   const clicks = [];
   lib().install({
     document: doc,
     getSettings: async () => settings,
     hasItems: async () => items,
-    onClick: () => clicks.push(1),
+    onClick: () => { clicks.push(1); return reply(); },
+    resetMs: 10,
   });
   const video = new FakeEl('video');
   doc.body.append(video);
@@ -78,6 +79,43 @@ test('a click forged by the page does not start a download', async () => {
   assert.equal(s.clicks.length, 0);
   btn.listeners.click[0](click(true));
   assert.equal(s.clicks.length, 1);
+});
+
+const settle = () => new Promise((r) => setImmediate(r)); // after promise callbacks, before the reset timer
+const tick = () => new Promise((r) => setTimeout(r, 40)); // after the reset timer
+
+test('a click shows it is sending, then that BDM took the video, then goes back to normal', async () => {
+  let answer;
+  const s = setup({ reply: () => new Promise((r) => { answer = r; }) });
+  await s.doc.fire('play', trusted({ target: s.video }));
+  const [btn] = buttons(s.doc);
+  btn.listeners.click[0](click(true));
+  assert.match(btn.textContent, /Sending/);
+  btn.listeners.click[0](click(true)); // a second click while sending is ignored
+  assert.equal(s.clicks.length, 1);
+  answer({ ok: true });
+  await settle();
+  assert.match(btn.textContent, /Added to BDM/);
+  await tick();
+  assert.match(btn.textContent, /Download this video/);
+});
+
+test('when the browser downloads it instead, the button says so', async () => {
+  const s = setup({ reply: async () => ({ ok: true, viaBrowser: true }) });
+  await s.doc.fire('play', trusted({ target: s.video }));
+  const [btn] = buttons(s.doc);
+  btn.listeners.click[0](click(true));
+  await settle();
+  assert.match(btn.textContent, /Downloading in your browser/);
+});
+
+test('a failed hand-over shows the reason on the button', async () => {
+  const s = setup({ reply: async () => ({ ok: false, error: 'BDM is not running.' }) });
+  await s.doc.fire('play', trusted({ target: s.video }));
+  const [btn] = buttons(s.doc);
+  btn.listeners.click[0](click(true));
+  await settle();
+  assert.match(btn.textContent, /BDM is not running/);
 });
 
 test('the button sits in a closed shadow root the page cannot reach into', async () => {

@@ -12,7 +12,9 @@ import { startCorpus } from './corpus-server.mjs';
 import { ROOT, EXTENSION, startBrowser } from './harness.mjs';
 
 const APP = path.join(ROOT, 'src/BDM.App/bin/Debug/net8.0-windows/BDM.App.exe');
-const PIPE = `\\\\.\\pipe\\bdm-ipc-${os.userInfo().username}`;
+// Its own pipe, so the test app never talks to (or is mistaken for) a BDM the owner has running.
+const PIPE_NAME = `bdm-e2e-${process.pid}`;
+const PIPE = `\\\\.\\pipe\\${PIPE_NAME}`;
 
 let corpus, browser, app, dataDir, downloadsDir, buildMessage;
 
@@ -62,7 +64,7 @@ before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bdm-e2e-data-'));
   downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bdm-e2e-dl-'));
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({ DownloadRoot: downloadsDir, ThemeMode: 'Dark' }));
-  app = spawn(APP, ['--background'], { env: { ...process.env, BDM_DATA_DIR: dataDir }, stdio: 'ignore' });
+  app = spawn(APP, ['--background'], { env: { ...process.env, BDM_DATA_DIR: dataDir, BDM_PIPE: PIPE_NAME }, stdio: 'ignore' });
   await waitFor(() => sendToApp({ op: 'ping' }).then((r) => r.ok), 'the app to answer ping', 30_000);
   await waitFor(() => fs.existsSync(path.join(dataDir, 'api.json')), 'the app to publish its API', 10_000);
   ({ buildMessage } = await import(pathToFileURL(path.join(EXTENSION, 'src/host.js')).href));

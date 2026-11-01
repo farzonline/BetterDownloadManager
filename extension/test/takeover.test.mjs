@@ -61,11 +61,30 @@ test('success: sends to host, then cancels and erases the browser download', asy
   assert.deepEqual(calls.map((c) => c[0]), ['send', 'cancel', 'erase']);
 });
 
+test('takeover reuses the headers the network layer saw for that file (Chrome may report about:client as referrer)', async () => {
+  let built;
+  const seen = { pageUrl: 'https://site/watch', title: 'Clip', headers: { Referer: 'https://player/', 'User-Agent': 'UA' } };
+  const { deps: d } = deps({
+    lookup: (url) => (url === dl().url ? seen : undefined),
+    buildMessage: async (item) => { built = item; return { op: 'add', url: item.url }; },
+  });
+  assert.equal(await takeOverDownload({ id: 5, ...dl(), referrer: 'about:client' }, d), 'taken');
+  assert.deepEqual(built.headers, { Referer: 'https://player/', 'User-Agent': 'UA' });
+  assert.equal(built.pageUrl, 'https://site/watch');
+});
+
 test('HostFailure_DoesNotCancelBrowserDownload', async () => {
   const { calls, deps: d } = deps({ sendToHost: async () => ({ ok: false, error: 'BDM not running' }) });
   assert.equal(await takeOverDownload({ id: 5, ...dl() }, d), 'fallback');
   assert.equal(calls.some((c) => c[0] === 'cancel'), false);
   assert.equal(calls.some((c) => c[0] === 'notify'), true);
+});
+
+test('a site that refuses BDM: the browser keeps its own download, and the note says so plainly', async () => {
+  const { calls, deps: d } = deps({ sendToHost: async () => ({ ok: false, useBrowser: true, error: 'This site only lets your browser download the file.' }) });
+  assert.equal(await takeOverDownload({ id: 5, ...dl() }, d), 'fallback');
+  assert.equal(calls.some((c) => c[0] === 'cancel'), false);
+  assert.deepEqual(calls.filter((c) => c[0] === 'notify').map((c) => c[1]), ['This site only lets your browser download the file.']);
 });
 
 test('host call that throws also falls back without cancelling', async () => {

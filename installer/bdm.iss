@@ -2,7 +2,7 @@
 ; Build with tools\build-release.ps1, which publishes the apps into dist\publish first.
 
 #define AppName "Better Download Manager"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 #define ExtensionId "depjhibopdmbilmmphmipdklabicghkf"
 
 [Setup]
@@ -20,6 +20,7 @@ OutputBaseFilename=BDM-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\src\BDM.App\Assets\bdm.ico
 UninstallDisplayIcon={app}\BDM.App.exe
 CloseApplications=yes
 RestartApplications=no

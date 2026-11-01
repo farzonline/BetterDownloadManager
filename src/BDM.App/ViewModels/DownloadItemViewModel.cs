@@ -45,6 +45,9 @@ public sealed class DownloadItemViewModel : ObservableObject
     public string? FilePath { get; private set; }
     public bool IsStream { get; private set; }
     public string AddedText => Added.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    public string? Description { get; private set; }
+    /// <summary>Size for sorting the Size column.</summary>
+    public long SizeBytes { get; private set; }
 
     public string Name { get => _name; private set => Set(ref _name, value); }
     public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
@@ -86,6 +89,7 @@ public sealed class DownloadItemViewModel : ObservableObject
     void Apply(DownloadRecord r)
     {
         FilePath = r.FilePath;
+        Description = r.Request.Description;
         IsStream = r.Stream != null;
         Name = r.FilePath != null ? Path.GetFileName(r.FilePath)
             : r.Request.FileName ?? (r.Stream?.Title is { Length: > 0 } t ? t + ".mp4" : Categories.NameFromUrl(r.Request.Url));
@@ -105,6 +109,7 @@ public sealed class DownloadItemViewModel : ObservableObject
             : r.Total is > 0 ? Math.Min(100, r.Downloaded * 100.0 / r.Total.Value)
             : r.State == DownloadState.Running ? -1 : 0;
         Progress = progress;
+        SizeBytes = r.Total ?? r.Downloaded;
         SizeText = r.Total is > 0 ? Format.Size(r.Total.Value) : r.Downloaded > 0 ? Format.Size(r.Downloaded) : "";
         SpeedText = r.State == DownloadState.Running ? Format.Speed(_speed) : "";
         EtaText = r.State == DownloadState.Running && _speed > 0 && r.Total is > 0
@@ -117,7 +122,7 @@ public sealed class DownloadItemViewModel : ObservableObject
             DownloadState.Completed => "Complete",
             _ => r.Failure switch
             {
-                DownloadFailure.AuthExpired => "Link expired — reopen the page to get a fresh one",
+                DownloadFailure.AuthExpired => "Access refused — reopen the page and retry",
                 DownloadFailure.Protected => "Protected (DRM) — can't be downloaded",
                 DownloadFailure.DiskFull => "Disk full — free some space, then resume",
                 _ => "Failed — " + (r.Error ?? "unknown error"),

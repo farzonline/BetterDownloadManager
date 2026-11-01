@@ -2,53 +2,66 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:BDM.App.Views"
-        Title="Download" Width="580" SizeToContent="Height" ResizeMode="NoResize"
-        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Title="Download" Width="600" SizeToContent="Height" ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen" ShowInTaskbar="True"
         Background="{DynamicResource Brush.Surface}" Foreground="{DynamicResource Brush.Text}"
         FontFamily="{DynamicResource Font.Text}" FontSize="{DynamicResource FontSize.Body}">
+  <Window.TaskbarItemInfo>
+    <TaskbarItemInfo x:Name="Taskbar"/>
+  </Window.TaskbarItemInfo>
   <StackPanel>
-    <v:PageHeader Glyph="&#xE896;" Hue="{StaticResource Hue.Indigo}" Title="{Binding Name}" Subtitle="{Binding StatusText}"/>
+    <v:PageHeader x:Name="Header" Glyph="&#xE896;" Hue="{StaticResource Hue.Indigo}" Title="{Binding Name}" Subtitle="{Binding StatusText}"/>
     <StackPanel Margin="24,20,24,22">
       <Grid>
         <TextBlock Text="{Binding PercentText}" FontFamily="{DynamicResource Font.Display}" FontSize="{DynamicResource FontSize.Display}" FontWeight="SemiBold"/>
-        <TextBlock Text="{Binding SizeText}" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
+        <TextBlock x:Name="Done" Text="Download complete" Foreground="{DynamicResource Brush.Success}" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,6" Visibility="Collapsed"/>
       </Grid>
-      <ProgressBar Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" Height="8" Margin="0,8,0,0"/>
-      <Canvas x:Name="Segments" Height="10" Margin="0,12,0,0" ClipToBounds="True" ToolTip="Connections: each bar is one part of the file"/>
+      <ProgressBar x:Name="Bar" Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" Height="8" Margin="0,8,0,0"/>
+      <Canvas x:Name="Segments" Height="10" Margin="0,10,0,0" ClipToBounds="True" ToolTip="Connections: each bar is one part of the file, fetched in parallel"/>
 
-      <Grid Margin="0,18,0,0">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Border Style="{StaticResource Style.Card}" Padding="14,12">
-          <StackPanel Orientation="Horizontal">
-            <Border Width="34" Height="34" CornerRadius="11" Background="{StaticResource Hue.Sky.Tint}">
-              <TextBlock Text="&#xE9D2;" FontFamily="{DynamicResource Font.Icon}" FontSize="16" Foreground="{StaticResource Hue.Sky.Brush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center"><TextBlock Text="Speed" Style="{StaticResource Text.Caption}"/><TextBlock Text="{Binding SpeedText}" FontWeight="SemiBold" MinHeight="18"/></StackPanel>
-          </StackPanel>
-        </Border>
-        <Border Grid.Column="2" Style="{StaticResource Style.Card}" Padding="14,12">
-          <StackPanel Orientation="Horizontal">
-            <Border Width="34" Height="34" CornerRadius="11" Background="{StaticResource Hue.Amber.Tint}">
-              <TextBlock Text="&#xE823;" FontFamily="{DynamicResource Font.Icon}" FontSize="16" Foreground="{StaticResource Hue.Amber.Brush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center"><TextBlock Text="Time left" Style="{StaticResource Text.Caption}"/><TextBlock Text="{Binding EtaText}" FontWeight="SemiBold" MinHeight="18"/></StackPanel>
-          </StackPanel>
-        </Border>
-      </Grid>
+      <!-- IDM's "Download status" table -->
+      <Border Style="{StaticResource Style.Card}" Padding="16,10" Margin="0,16,0,0">
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="26"/><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/><RowDefinition Height="28"/>
+          </Grid.RowDefinitions>
+          <TextBlock Grid.Row="0" Text="&#xE946;" Style="{StaticResource Text.MenuIcon}" Foreground="{StaticResource Hue.Indigo.Brush}"/>
+          <TextBlock Grid.Row="0" Grid.Column="1" Text="Status" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding StatusText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}"/>
+          <TextBlock Grid.Row="1" Text="&#xE7B8;" Style="{StaticResource Text.MenuIcon}" Foreground="{StaticResource Hue.Violet.Brush}"/>
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="File size" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="1" Grid.Column="2" x:Name="SizeValue" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="2" Text="&#xE896;" Style="{StaticResource Text.MenuIcon}" Foreground="{StaticResource Hue.Emerald.Brush}"/>
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="Downloaded" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="2" Grid.Column="2" x:Name="DownloadedValue" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="3" Text="&#xE9D2;" Style="{StaticResource Text.MenuIcon}" Foreground="{StaticResource Hue.Sky.Brush}"/>
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="Transfer rate" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding SpeedText}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="4" Text="&#xE823;" Style="{StaticResource Text.MenuIcon}" Foreground="{StaticResource Hue.Amber.Brush}"/>
+          <TextBlock Grid.Row="4" Grid.Column="1" Text="Time left" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="4" Grid.Column="2" Text="{Binding EtaText}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="5" Text="&#xE8CE;" Style="{StaticResource Text.MenuIcon}" Foreground="{StaticResource Hue.Teal.Brush}"/>
+          <TextBlock Grid.Row="5" Grid.Column="1" Text="Connections" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Row="5" Grid.Column="2" x:Name="ConnectionsValue" VerticalAlignment="Center"/>
+        </Grid>
+      </Border>
 
-      <Grid Margin="0,18,0,0">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="26"/></Grid.RowDefinitions>
-        <TextBlock Text="&#xE774;" FontFamily="{DynamicResource Font.Icon}" FontSize="13" Foreground="{DynamicResource Brush.TextMuted}" VerticalAlignment="Center"/>
-        <TextBlock Grid.Column="1" Text="{Binding Url}" Style="{StaticResource Text.Mono}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}" VerticalAlignment="Center"/>
-        <TextBlock Grid.Row="1" Text="&#xE838;" FontFamily="{DynamicResource Font.Icon}" FontSize="13" Foreground="{DynamicResource Brush.TextMuted}" VerticalAlignment="Center"/>
-        <TextBlock x:Name="SaveTo" Grid.Row="1" Grid.Column="1" Style="{StaticResource Text.Mono}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+      <Grid Margin="0,14,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="26"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="24"/><RowDefinition Height="24"/></Grid.RowDefinitions>
+        <TextBlock Text="&#xE774;" Style="{StaticResource Text.MenuIcon}"/>
+        <TextBlock Grid.Column="1" Text="{Binding Url}" Style="{StaticResource Text.Mono}" Foreground="{DynamicResource Brush.TextMuted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}" VerticalAlignment="Center"/>
+        <TextBlock Grid.Row="1" Text="&#xE838;" Style="{StaticResource Text.MenuIcon}"/>
+        <TextBlock x:Name="SaveTo" Grid.Row="1" Grid.Column="1" Style="{StaticResource Text.Mono}" Foreground="{DynamicResource Brush.TextMuted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
       </Grid>
     </StackPanel>
     <Border Background="{DynamicResource Brush.SurfaceAlt}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0" Padding="24,14">
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button x:Name="OpenButton" Content="Open" v:Ico.Glyph="&#xE8E5;" Style="{StaticResource Style.Button.Accent}" Margin="0,0,8,0" Click="Open_Click" Visibility="Collapsed"/>
+        <Button x:Name="FolderButton" Content="Show in folder" v:Ico.Glyph="&#xE838;" Margin="0,0,8,0" Click="Folder_Click" Visibility="Collapsed"/>
         <Button x:Name="PauseResume" Content="Pause" v:Ico.Glyph="&#xE769;" Margin="0,0,8,0" Click="PauseResume_Click"/>
-        <Button Content="Close" IsCancel="True" IsDefault="True"/>
+        <Button Content="Close" IsCancel="True" ToolTip="Closing this window doesn't stop the download"/>
       </StackPanel>
     </Border>
   </StackPanel>

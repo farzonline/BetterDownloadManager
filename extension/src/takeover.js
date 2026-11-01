@@ -51,16 +51,18 @@ export async function takeOverDownload(item, deps) {
 
   let reply;
   try {
+    // The network layer may have seen this file load with the real Referer/User-Agent; Chrome's own referrer can be junk.
+    const seen = deps.lookup?.(url) ?? deps.lookup?.(item.url);
     const msg = await deps.buildMessage({
-      kind: 'file', url, pageUrl: item.referrer || undefined, title: item.filename || undefined,
-      headers: item.referrer ? { Referer: item.referrer } : {},
+      kind: 'file', url, pageUrl: seen?.pageUrl ?? (item.referrer || undefined), title: item.filename || seen?.title || undefined,
+      headers: seen?.headers ?? (item.referrer ? { Referer: item.referrer } : {}),
     });
     reply = await deps.sendToHost(msg);
   } catch (e) {
     reply = { ok: false, error: String(e?.message ?? e) };
   }
   if (!reply?.ok) {
-    deps.notify(`BDM could not take this download (${reply?.error ?? 'no reply'}). The browser will download it instead.`);
+    deps.notify(reply?.useBrowser ? reply.error : `BDM could not take this download (${reply?.error ?? 'no reply'}). The browser will download it instead.`);
     return 'fallback';
   }
   await deps.cancel(item.id);

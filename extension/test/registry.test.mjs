@@ -82,6 +82,20 @@ test('markProtected flags only the matching frame\'s items', () => {
   assert.deepEqual(r.list(1).map((i) => !!i.protected), [true, false]);
 });
 
+test('headers the browser really sent (network layer) are not replaced by a later page-layer guess', () => {
+  const r = createRegistry();
+  r.add(1, item('https://cdn/v.mp4', { via: 'network', headers: { Referer: 'https://player.example/', 'User-Agent': 'UA' } }));
+  r.add(1, item('https://cdn/v.mp4', { via: 'dom', headers: { Referer: 'https://site.example/watch' } }));
+  assert.deepEqual(r.list(1)[0].headers, { Referer: 'https://player.example/', 'User-Agent': 'UA' });
+});
+
+test('find looks a url up across tabs, ignoring signature parameters', () => {
+  const r = createRegistry();
+  r.add(4, item('https://cdn/v.mp4?sig=1', { headers: { Referer: 'https://player/' } }));
+  assert.equal(r.find('https://cdn/v.mp4?sig=2').headers.Referer, 'https://player/');
+  assert.equal(r.find('https://cdn/other.mp4'), undefined);
+});
+
 test('a later report with fewer headers does not erase the headers already captured (the cookie that unlocks a signed url)', () => {
   const r = createRegistry();
   r.add(1, item('https://x/a.mpd?exp=1&sig=ok', { kind: 'dash', headers: { Cookie: 'sessionid=abc', Referer: 'https://p/1' } }));

@@ -13,12 +13,33 @@ export function sendToHost(msg, api = globalThis.chrome) {
   });
 }
 
+/**
+ * Sends a found file to BDM. Sites behind bot protection refuse anything but a real browser; then BDM answers
+ * useBrowser and the browser downloads the file itself (the way 4saved works), so a found file is never lost.
+ * @returns {Promise<{ok: boolean, error?: string, viaBrowser?: boolean}>}
+ */
+export async function deliver(msg, { send = sendToHost, download, skipTakeover }) {
+  const r = await send(msg);
+  if (r.ok || !r.useBrowser || msg.op !== 'add') return r;
+  skipTakeover(msg.url); // our own browser download must not be handed straight back to BDM
+  try {
+    await download({ url: msg.url });
+    return { ok: true, viaBrowser: true };
+  } catch (e) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+}
+
 const STREAM_KINDS = new Set(['hls', 'dash']);
+const isWeb = (u) => /^https?:\/\//i.test(u ?? '');
 
 /** Builds the host message for a registry item. Throws for DRM-protected streams. */
-export async function buildMessage(item, { cookies, askQuality = false } = {}) {
+export async function buildMessage(item, { cookies, askQuality = false, userAgent = globalThis.navigator?.userAgent } = {}) {
   if (item.protected) throw new Error('This stream is protected (DRM) and cannot be downloaded.');
   const headers = { ...item.headers };
+  if (!isWeb(headers.Referer)) delete headers.Referer; // e.g. Chrome's "about:client"
+  // Many video CDNs refuse requests that do not look like the browser that found the link.
+  if (userAgent && !headers['User-Agent']) headers['User-Agent'] = userAgent;
   let cookie = headers.Cookie ?? headers.cookie;
   delete headers.Cookie;
   delete headers.cookie;
@@ -32,7 +53,7 @@ export async function buildMessage(item, { cookies, askQuality = false } = {}) {
   return {
     op: stream ? (askQuality ? 'addStreamAsk' : 'addStream') : 'add',
     url: item.url,
-    pageUrl: item.pageUrl,
+    pageUrl: isWeb(item.pageUrl) ? item.pageUrl : undefined,
     title: item.title,
     headers,
     cookie,

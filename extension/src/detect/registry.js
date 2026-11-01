@@ -15,6 +15,7 @@ export function dedupeKey(url) {
   }
 }
 
+const OBSERVED = new Set(['network', 'debugger']);
 const frameKey = (u) => { try { const x = new URL(u); return x.origin + x.pathname; } catch { return u; } };
 
 export function createRegistry({ onChange } = {}) {
@@ -41,14 +42,17 @@ export function createRegistry({ onChange } = {}) {
         // Signed URLs expire: keep the newest URL, but merge rather than replace: the network layer sees request headers
         // (Cookie) that the page layer cannot, and a later report must not erase them. DRM is sticky.
         const known = Object.fromEntries(Object.entries(item).filter(([, v]) => v !== undefined));
+        // Headers the browser really sent (network/debugger layers) beat the page layer's guess (tab URL as Referer).
+        const pageGuess = existing.observed && !OBSERVED.has(item.via);
         const merged = {
-          ...existing, ...known, headers: { ...existing.headers, ...item.headers }, id: existing.id,
+          ...existing, ...known, id: existing.id, observed: existing.observed || OBSERVED.has(item.via) || undefined,
+          headers: pageGuess ? { ...item.headers, ...existing.headers } : { ...existing.headers, ...item.headers },
           protected: existing.protected || item.protected || frameIsProtected(tabId, item) || undefined,
         };
         b.set(key, merged);
         return { item: merged, isNew: false };
       }
-      const created = { ...item, id: String(++seq) };
+      const created = { ...item, id: String(++seq), observed: OBSERVED.has(item.via) || undefined };
       if (frameIsProtected(tabId, item)) created.protected = true;
       b.set(key, created);
       onChange?.(tabId, b.size);
@@ -56,6 +60,12 @@ export function createRegistry({ onChange } = {}) {
     },
     list: (tabId) => [...(tabs.get(tabId)?.values() ?? [])],
     get: (tabId, id) => [...(tabs.get(tabId)?.values() ?? [])].find((i) => i.id === id),
+    /** The item for this url in any tab (signature parameters ignored). */
+    find(url) {
+      const key = dedupeKey(url);
+      for (const b of tabs.values()) if (b.has(key)) return b.get(key);
+      return undefined;
+    },
     clear(tabId) {
       tabs.delete(tabId);
       drmFrames.delete(tabId);

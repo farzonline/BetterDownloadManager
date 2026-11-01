@@ -2,145 +2,240 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:BDM.App.Views"
-        Title="Better Download Manager" Width="1160" Height="720" MinWidth="820" MinHeight="500"
+        Title="Better Download Manager" Width="1240" Height="740" MinWidth="900" MinHeight="520"
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True" SnapsToDevicePixels="True"
         Background="{DynamicResource Brush.Background}" Foreground="{DynamicResource Brush.Text}"
         FontFamily="{DynamicResource Font.Text}" FontSize="{DynamicResource FontSize.Body}"
         StateChanged="Window_StateChanged" PreviewKeyDown="Window_PreviewKeyDown">
   <WindowChrome.WindowChrome>
-    <WindowChrome CaptionHeight="56" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+    <WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
   </WindowChrome.WindowChrome>
 
   <Window.Resources>
-    <!-- One download as a card: file-type tile, name, state line, progress, numbers -->
-    <DataTemplate x:Key="DownloadRow">
-      <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <Border Width="46" Height="46" CornerRadius="14" VerticalAlignment="Center" Background="{Binding CategoryHue, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Tint}">
-          <TextBlock Text="{Binding CategoryGlyph}" FontFamily="{DynamicResource Font.Icon}" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"
-                     Foreground="{Binding CategoryHue, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Brush}"/>
-        </Border>
-        <StackPanel Grid.Column="1" Margin="14,0,16,0" VerticalAlignment="Center">
-          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
-          <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
-            <TextBlock x:Name="StateIcon" Text="{Binding StateGlyph}" FontFamily="{DynamicResource Font.Icon}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"
-                       Foreground="{DynamicResource Brush.TextMuted}"/>
-            <TextBlock x:Name="StateText" Text="{Binding StatusText}" Style="{StaticResource Text.Caption}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}" MaxWidth="560"/>
-          </StackPanel>
-          <ProgressBar x:Name="Bar" Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" Margin="0,8,0,0"/>
+    <!-- IDM-style toolbar button: a tinted icon tile with its label underneath. Tag = the hue name. -->
+    <Style x:Key="Style.ToolButton" TargetType="Button">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource Style.FocusRing}"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="Bd" Width="72" Padding="0,6,0,5" Margin="0" CornerRadius="{DynamicResource Radius.Box}" Background="Transparent">
+              <StackPanel>
+                <Border x:Name="Tile" Width="38" Height="38" CornerRadius="12"
+                        Background="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Tint}">
+                  <TextBlock Text="{Binding (v:Ico.Glyph), RelativeSource={RelativeSource TemplatedParent}}" FontFamily="{DynamicResource Font.Icon}" FontSize="18"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                             Foreground="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Brush}"/>
+                </Border>
+                <ContentPresenter Margin="0,5,0,0" HorizontalAlignment="Center" TextElement.FontSize="12"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Raised}"/></Trigger>
+              <Trigger Property="IsPressed" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selection}"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Bd" Property="Opacity" Value="0.38"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Category tree rows (IDM's left pane): file types sit one level in under All Downloads -->
+    <Style x:Key="Style.TreeItem" TargetType="ListBoxItem">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource Style.FocusRing}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="Bd" Height="34" Margin="{Binding Converter={x:Static v:CategoryIndentConverter.Instance}}" CornerRadius="{DynamicResource Radius.Item}" Background="Transparent">
+              <Grid>
+                <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="0,8" CornerRadius="2" Background="{StaticResource Brush.Brand}" Visibility="Collapsed"/>
+                <StackPanel Orientation="Horizontal" Margin="10,0,8,0" VerticalAlignment="Center">
+                  <Border Width="24" Height="24" CornerRadius="7" Background="{Binding Converter={x:Static v:CategoryBrushConverter.Instance}, ConverterParameter=Tint}">
+                    <TextBlock Text="{Binding Converter={x:Static v:CategoryGlyphConverter.Instance}}" FontFamily="{DynamicResource Font.Icon}" FontSize="13"
+                               Foreground="{Binding Converter={x:Static v:CategoryBrushConverter.Instance}, ConverterParameter=Brush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </Border>
+                  <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}"/>
+                </StackPanel>
+              </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Raised}"/>
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selection}"/>
+                <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
+                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Status cell: state icon + words (never colour alone) and a slim bar while it runs -->
+    <DataTemplate x:Key="StatusCell">
+      <StackPanel>
+        <StackPanel Orientation="Horizontal">
+          <TextBlock x:Name="StateIcon" Text="{Binding StateGlyph}" FontFamily="{DynamicResource Font.Icon}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource Brush.TextMuted}"/>
+          <TextBlock x:Name="StateText" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}" VerticalAlignment="Center"/>
         </StackPanel>
-        <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" MinWidth="104">
-          <TextBlock Text="{Binding SizeText}" HorizontalAlignment="Right" FontWeight="SemiBold"/>
-          <TextBlock Text="{Binding SpeedText}" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right" Margin="0,2,0,0"/>
-          <TextBlock Text="{Binding EtaText}" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right"/>
-        </StackPanel>
-      </Grid>
+        <ProgressBar x:Name="Bar" Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" Height="4" Margin="0,4,0,0" Visibility="Collapsed"/>
+      </StackPanel>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding StateKind}" Value="running">
           <Setter TargetName="StateIcon" Property="Foreground" Value="{DynamicResource Brush.AccentText}"/>
           <Setter TargetName="StateText" Property="Foreground" Value="{DynamicResource Brush.AccentText}"/>
+          <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding StateKind}" Value="paused">
+          <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="Bar" Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding StateKind}" Value="done">
           <Setter TargetName="StateIcon" Property="Foreground" Value="{DynamicResource Brush.Success}"/>
-          <Setter TargetName="StateText" Property="Foreground" Value="{DynamicResource Brush.Success}"/>
-          <Setter TargetName="Bar" Property="Visibility" Value="Collapsed"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding StateKind}" Value="failed">
           <Setter TargetName="StateIcon" Property="Foreground" Value="{DynamicResource Brush.Danger}"/>
           <Setter TargetName="StateText" Property="Foreground" Value="{DynamicResource Brush.Danger}"/>
-          <Setter TargetName="Bar" Property="Foreground" Value="{DynamicResource Brush.Danger}"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding StateKind}" Value="protected">
           <Setter TargetName="StateIcon" Property="Foreground" Value="{DynamicResource Brush.Warn}"/>
           <Setter TargetName="StateText" Property="Foreground" Value="{DynamicResource Brush.Warn}"/>
-          <Setter TargetName="Bar" Property="Visibility" Value="Collapsed"/>
-        </DataTrigger>
-        <DataTrigger Binding="{Binding StateKind}" Value="paused">
-          <Setter TargetName="Bar" Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding Progress}" Value="-1">
           <Setter TargetName="Bar" Property="IsIndeterminate" Value="True"/>
         </DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
+
+    <!-- Top-level menu bar entries: header plus a drop-down of ordinary (themed) menu items -->
+    <Style x:Key="Style.MenuBarItem" TargetType="MenuItem">
+      <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="MenuItem">
+            <Grid>
+              <Border x:Name="Bd" Height="30" Padding="10,0" CornerRadius="{DynamicResource Radius.Item}" Background="Transparent">
+                <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+              </Border>
+              <Popup IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" Placement="Bottom" VerticalOffset="4"
+                     AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                <Border Background="{DynamicResource Brush.Surface}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="1" CornerRadius="{DynamicResource Radius.Box}"
+                        Padding="4" MinWidth="240" Effect="{StaticResource Effect.Raised}" Margin="0,0,12,12">
+                  <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" TextElement.FontFamily="{DynamicResource Font.Text}"/>
+                </Border>
+              </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Raised}"/></Trigger>
+              <Trigger Property="IsSubmenuOpen" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selection}"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
 
   <Grid x:Name="Root">
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="264"/>
-      <ColumnDefinition Width="1"/>
-      <ColumnDefinition Width="*"/>
-    </Grid.ColumnDefinitions>
     <Grid.RowDefinitions>
-      <RowDefinition Height="56"/>
+      <RowDefinition Height="40"/>
+      <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
+      <RowDefinition Height="30"/>
     </Grid.RowDefinitions>
 
-    <!-- Sidebar: tinted with the brand colour at the top, its top band is the left half of the title bar -->
-    <Border Grid.Column="0" Grid.RowSpan="2" Background="{DynamicResource Brush.BackgroundAlt}"/>
-    <Border Grid.Column="0" Grid.RowSpan="2" IsHitTestVisible="False">
+    <!-- Title bar: crest, name and the menu bar (IDM: Tasks · File · Downloads · View · Help) -->
+    <Border Grid.Row="0" Grid.RowSpan="2" Background="{DynamicResource Brush.BackgroundAlt}"/>
+    <Border Grid.Row="0" Grid.RowSpan="2" IsHitTestVisible="False">
       <Border.Background>
-        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-          <GradientStop Color="#2E7C6CFF" Offset="0"/>
-          <GradientStop Color="#0A22D3EE" Offset="0.6"/>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+          <GradientStop Color="#267C6CFF" Offset="0"/>
+          <GradientStop Color="#0A22D3EE" Offset="0.55"/>
           <GradientStop Color="#00000000" Offset="1"/>
         </LinearGradientBrush>
       </Border.Background>
     </Border>
-    <StackPanel Grid.Column="0" Grid.Row="0" Orientation="Horizontal" Margin="18,0,8,0" VerticalAlignment="Center">
-      <Image x:Name="Crest" Width="32" Height="32" Margin="0,0,12,0" RenderOptions.BitmapScalingMode="HighQuality"/>
-      <StackPanel VerticalAlignment="Center">
-        <TextBlock Text="BETTER" Style="{StaticResource Text.Section}" FontSize="10"/>
-        <TextBlock Text="Download Manager" FontFamily="{DynamicResource Font.Display}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="170"/>
+    <Grid Grid.Row="0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <StackPanel Orientation="Horizontal" Margin="14,0,14,0" VerticalAlignment="Center">
+        <Image x:Name="Crest" Width="22" Height="22" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+        <TextBlock Text="Better Download Manager" FontFamily="{DynamicResource Font.Display}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
       </StackPanel>
-    </StackPanel>
-    <Grid Grid.Column="0" Grid.Row="1">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <TextBlock Text="LIBRARY" Style="{StaticResource Text.Section}" Margin="26,14,0,6"/>
-      <ListBox Grid.Row="1" x:Name="Nav" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory, Mode=TwoWay}"
-               ItemContainerStyle="{StaticResource Style.NavItem}" Background="Transparent" BorderThickness="0"
-               AutomationProperties.Name="Categories" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
-      <!-- Live status card -->
-      <Border Grid.Row="2" Margin="14,8,14,14" Style="{StaticResource Style.Card}" Padding="14,12">
-        <Grid>
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-          <Border Width="34" Height="34" CornerRadius="11" Background="{StaticResource Brush.Brand}" VerticalAlignment="Center">
-            <TextBlock Text="&#xE9D2;" FontFamily="{DynamicResource Font.Icon}" FontSize="16" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-          <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-            <TextBlock Text="Right now" Style="{StaticResource Text.Section}" FontSize="10"/>
-            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" FontSize="12" AutomationProperties.LiveSetting="Polite" Margin="0,2,0,0"/>
-          </StackPanel>
-        </Grid>
-      </Border>
+      <Menu Grid.Column="1" Background="Transparent" VerticalAlignment="Center" WindowChrome.IsHitTestVisibleInChrome="True" Foreground="{DynamicResource Brush.Text}">
+        <MenuItem Header="_Tasks" Style="{StaticResource Style.MenuBarItem}">
+          <MenuItem Header="Add URL…" InputGestureText="Ctrl+N" Command="{Binding AddUrlCommand}"><MenuItem.Icon><TextBlock Text="&#xE710;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Add batch download…" Click="Batch_Click"><MenuItem.Icon><TextBlock Text="&#xE8FD;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Site grabber…" Click="Grabber_Click"><MenuItem.Icon><TextBlock Text="&#xE774;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <Separator/>
+          <MenuItem Header="Show or hide drop target" Click="DropTarget_Click"><MenuItem.Icon><TextBlock Text="&#xE7C9;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <Separator/>
+          <MenuItem Header="Exit" Click="Exit_Click"><MenuItem.Icon><TextBlock Text="&#xE7E8;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+        </MenuItem>
+        <MenuItem Header="_File" Style="{StaticResource Style.MenuBarItem}">
+          <MenuItem Header="Open" Command="{Binding OpenFileCommand}"><MenuItem.Icon><TextBlock Text="&#xE8E5;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"><MenuItem.Icon><TextBlock Text="&#xE838;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Copy address" Click="CopyAddress_Click"><MenuItem.Icon><TextBlock Text="&#xE8C8;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Progress window" Click="ShowProgress_Click"><MenuItem.Icon><TextBlock Text="&#xE9D2;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <Separator/>
+          <MenuItem Header="Remove…" InputGestureText="Del" Command="{Binding RemoveCommand}"><MenuItem.Icon><TextBlock Text="&#xE74D;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+        </MenuItem>
+        <MenuItem Header="_Downloads" Style="{StaticResource Style.MenuBarItem}">
+          <MenuItem Header="Resume" Command="{Binding ResumeCommand}"><MenuItem.Icon><TextBlock Text="&#xE768;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Stop" Command="{Binding PauseCommand}"><MenuItem.Icon><TextBlock Text="&#xE71A;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Start queue" Command="{Binding StartQueueCommand}"><MenuItem.Icon><TextBlock Text="&#xE895;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Stop all" Command="{Binding StopAllCommand}"><MenuItem.Icon><TextBlock Text="&#xE769;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Delete completed" Command="{Binding DeleteCompletedCommand}"><MenuItem.Icon><TextBlock Text="&#xE73E;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <Separator/>
+          <MenuItem Header="Scheduler and queues…" Click="Queues_Click"><MenuItem.Icon><TextBlock Text="&#xE787;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Download history…" Click="History_Click"><MenuItem.Icon><TextBlock Text="&#xE81C;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Site logins…" Click="Logins_Click"><MenuItem.Icon><TextBlock Text="&#xE72E;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Proxy and VPN profiles…" Click="Proxy_Click"><MenuItem.Icon><TextBlock Text="&#xE83D;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <Separator/>
+          <MenuItem Header="Options…" Click="Options_Click"><MenuItem.Icon><TextBlock Text="&#xE713;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+        </MenuItem>
+        <MenuItem Header="_View" Style="{StaticResource Style.MenuBarItem}">
+          <MenuItem Header="Dark theme" Tag="Dark" Click="Theme_Click"><MenuItem.Icon><TextBlock Text="&#xE708;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Light theme" Tag="Light" Click="Theme_Click"><MenuItem.Icon><TextBlock Text="&#xE706;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="Follow Windows" Tag="System" Click="Theme_Click"><MenuItem.Icon><TextBlock Text="&#xE7F4;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <Separator/>
+          <MenuItem Header="Show or hide categories" Click="ToggleCategories_Click"><MenuItem.Icon><TextBlock Text="&#xE700;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+        </MenuItem>
+        <MenuItem Header="_Help" Style="{StaticResource Style.MenuBarItem}">
+          <MenuItem Header="Open the log folder" Click="Logs_Click"><MenuItem.Icon><TextBlock Text="&#xE9F9;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+          <MenuItem Header="About Better Download Manager" Click="About_Click"><MenuItem.Icon><TextBlock Text="&#xE946;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+        </MenuItem>
+      </Menu>
+      <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top" WindowChrome.IsHitTestVisibleInChrome="True">
+        <Button x:Name="MinButton" Content="&#xE921;" Style="{StaticResource Style.Button.Chrome}" Height="40" ToolTip="Minimize" AutomationProperties.Name="Minimize" Click="Min_Click"/>
+        <Button x:Name="MaxButton" Content="&#xE922;" Style="{StaticResource Style.Button.Chrome}" Height="40" ToolTip="Maximize" AutomationProperties.Name="Maximize" Click="Max_Click"/>
+        <Button Content="&#xE8BB;" Style="{StaticResource Style.Button.ChromeClose}" Height="40" ToolTip="Close" AutomationProperties.Name="Close" Click="Close_Click"/>
+      </StackPanel>
     </Grid>
-    <Border Grid.Column="1" Grid.RowSpan="2" Background="{DynamicResource Brush.Line}"/>
 
-    <!-- Content: toolbar band (the right half of the title bar) -->
-    <Grid Grid.Column="2" Grid.Row="0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
-      </Grid.ColumnDefinitions>
-      <StackPanel Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center" WindowChrome.IsHitTestVisibleInChrome="True">
-        <Button Command="{Binding AddUrlCommand}" Style="{StaticResource Style.Button.Accent}" ToolTip="Add a download (Ctrl+N)" Margin="0,0,14,0" Padding="14,0,18,0">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Text="&#xE710;" FontFamily="{DynamicResource Font.Icon}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <TextBlock Text="Add URL" VerticalAlignment="Center"/>
-          </StackPanel>
-        </Button>
-        <Border Style="{StaticResource Style.Card}" Padding="3" CornerRadius="13">
-          <StackPanel Orientation="Horizontal">
-            <Button Content="&#xE768;" Command="{Binding ResumeCommand}" Style="{StaticResource Style.Button.Icon}" ToolTip="Resume" AutomationProperties.Name="Resume"/>
-            <Button Content="&#xE769;" Command="{Binding PauseCommand}" Style="{StaticResource Style.Button.Icon}" ToolTip="Pause" AutomationProperties.Name="Pause"/>
-            <Button Content="&#xE74D;" Command="{Binding RemoveCommand}" Style="{StaticResource Style.Button.Icon}" ToolTip="Remove (Delete)" AutomationProperties.Name="Remove"/>
-            <Border Width="1" Height="18" Margin="4,0" Background="{DynamicResource Brush.Line}"/>
-            <Button Content="&#xE8E5;" Command="{Binding OpenFileCommand}" Style="{StaticResource Style.Button.Icon}" ToolTip="Open file" AutomationProperties.Name="Open file"/>
-            <Button Content="&#xE838;" Command="{Binding OpenFolderCommand}" Style="{StaticResource Style.Button.Icon}" ToolTip="Show in folder" AutomationProperties.Name="Show in folder"/>
-            <Button x:Name="MoreButton" Content="&#xE712;" Style="{StaticResource Style.Button.Icon}" ToolTip="More" AutomationProperties.Name="More" Click="More_Click"/>
-          </StackPanel>
-        </Border>
+    <!-- Toolbar -->
+    <Grid Grid.Row="1" Margin="10,2,14,8">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <StackPanel Orientation="Horizontal">
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Indigo" v:Ico.Glyph="&#xE710;" Content="Add URL" Command="{Binding AddUrlCommand}" ToolTip="Add a download (Ctrl+N)"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Emerald" v:Ico.Glyph="&#xE768;" Content="Resume" Command="{Binding ResumeCommand}" ToolTip="Resume the selected downloads"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Amber" v:Ico.Glyph="&#xE71A;" Content="Stop" Command="{Binding PauseCommand}" ToolTip="Stop the selected downloads (they can be resumed)"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Orange" v:Ico.Glyph="&#xE769;" Content="Stop all" Command="{Binding StopAllCommand}" ToolTip="Stop every running and waiting download"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Rose" v:Ico.Glyph="&#xE74D;" Content="Delete" Command="{Binding RemoveCommand}" ToolTip="Remove the selected downloads (Delete)"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Pink" v:Ico.Glyph="&#xE73E;" Content="Clear done" Command="{Binding DeleteCompletedCommand}" ToolTip="Clear finished downloads from the list (the files stay)"/>
+        <Border Width="1" Margin="8,10" Background="{DynamicResource Brush.Line}"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Slate" v:Ico.Glyph="&#xE713;" Content="Options" Click="Options_Click" ToolTip="Options"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Violet" v:Ico.Glyph="&#xE787;" Content="Scheduler" Click="Queues_Click" ToolTip="Queues and their schedule"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Teal" v:Ico.Glyph="&#xE895;" Content="Start queue" Command="{Binding StartQueueCommand}" ToolTip="Resume every stopped or failed download"/>
+        <Border Width="1" Margin="8,10" Background="{DynamicResource Brush.Line}"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Sky" v:Ico.Glyph="&#xE774;" Content="Grabber" Click="Grabber_Click" ToolTip="Download the files a website links to"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Violet" v:Ico.Glyph="&#xE8FD;" Content="Batch" Click="Batch_Click" ToolTip="Download a numbered series of files"/>
+        <Button Style="{StaticResource Style.ToolButton}" Tag="Sky" v:Ico.Glyph="&#xE81C;" Content="History" Click="History_Click" ToolTip="Everything you have downloaded"/>
       </StackPanel>
-      <Border Grid.Column="2" Width="240" Height="36" Margin="0,0,14,0" Style="{StaticResource Style.Card}" Padding="0" CornerRadius="18" WindowChrome.IsHitTestVisibleInChrome="True">
+      <Border Grid.Column="1" Width="220" Height="36" VerticalAlignment="Center" Style="{StaticResource Style.Card}" Padding="0" CornerRadius="18">
         <Grid>
           <TextBlock Text="&#xE721;" FontFamily="{DynamicResource Font.Icon}" FontSize="14" Foreground="{DynamicResource Brush.TextMuted}" VerticalAlignment="Center" Margin="14,0,0,0" IsHitTestVisible="False" HorizontalAlignment="Left"/>
           <TextBox x:Name="SearchBox" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Search downloads (Ctrl+F)"
@@ -157,65 +252,123 @@
           </TextBlock>
         </Grid>
       </Border>
-      <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top" WindowChrome.IsHitTestVisibleInChrome="True">
-        <Button x:Name="MinButton" Content="&#xE921;" Style="{StaticResource Style.Button.Chrome}" ToolTip="Minimize" AutomationProperties.Name="Minimize" Click="Min_Click"/>
-        <Button x:Name="MaxButton" Content="&#xE922;" Style="{StaticResource Style.Button.Chrome}" ToolTip="Maximize" AutomationProperties.Name="Maximize" Click="Max_Click"/>
-        <Button Content="&#xE8BB;" Style="{StaticResource Style.Button.ChromeClose}" ToolTip="Close" AutomationProperties.Name="Close" Click="Close_Click"/>
-      </StackPanel>
     </Grid>
 
-    <!-- Downloads -->
-    <Grid Grid.Column="2" Grid.Row="1">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-
-      <Border x:Name="Banner" Visibility="Collapsed" Margin="18,6,18,0" Padding="16,12" CornerRadius="{DynamicResource Radius.Box}" BorderThickness="1">
-        <Grid>
-          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-          <TextBlock x:Name="BannerIcon" Text="&#xE73E;" FontFamily="{DynamicResource Font.Icon}" FontSize="16" VerticalAlignment="Center" Margin="0,0,12,0"/>
-          <TextBlock Grid.Column="1" x:Name="BannerText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite"/>
-          <StackPanel x:Name="BannerActions" Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0"/>
-          <Button Grid.Column="3" Content="&#xE711;" Style="{StaticResource Style.Button.Icon}" Width="28" Height="28" Margin="8,-4,-8,-4" ToolTip="Dismiss" AutomationProperties.Name="Dismiss" Click="BannerClose_Click"/>
-        </Grid>
+    <!-- Categories | downloads -->
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition x:Name="TreeColumn" Width="230" MinWidth="0"/>
+        <ColumnDefinition Width="Auto"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Border x:Name="TreePane" Background="{DynamicResource Brush.BackgroundAlt}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" Margin="16,10,8,4">
+            <TextBlock Text="CATEGORIES" Style="{StaticResource Text.Section}" VerticalAlignment="Center"/>
+            <Button Content="&#xE711;" Style="{StaticResource Style.Button.Icon}" Width="26" Height="26" MinHeight="26" FontSize="10" HorizontalAlignment="Right"
+                    ToolTip="Hide categories (View menu brings them back)" AutomationProperties.Name="Hide categories" Click="ToggleCategories_Click"/>
+          </Grid>
+          <ListBox x:Name="Nav" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory, Mode=TwoWay}"
+                   ItemContainerStyle="{StaticResource Style.TreeItem}" Background="Transparent" BorderThickness="0" Padding="6,0"
+                   AutomationProperties.Name="Categories" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+        </DockPanel>
       </Border>
+      <GridSplitter x:Name="TreeSplitter" Grid.Column="1" Width="1" HorizontalAlignment="Stretch" Background="{DynamicResource Brush.Line}" ResizeBehavior="PreviousAndNext"/>
 
-      <ListView Grid.Row="1" x:Name="List" ItemsSource="{Binding Items}" SelectionMode="Extended" Background="Transparent" BorderThickness="0"
-                Margin="0,8,0,0" AutomationProperties.Name="Downloads" SelectionChanged="List_SelectionChanged" MouseDoubleClick="List_DoubleClick"
-                ItemContainerStyle="{StaticResource Style.CardRow}" ItemTemplate="{StaticResource DownloadRow}"
-                ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True">
-        <ListView.ContextMenu>
-          <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-            <MenuItem Header="Open" Command="{Binding OpenFileCommand}"><MenuItem.Icon><TextBlock Text="&#xE8E5;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
-            <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"><MenuItem.Icon><TextBlock Text="&#xE838;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
-            <Separator/>
-            <MenuItem Header="Resume" Command="{Binding ResumeCommand}"><MenuItem.Icon><TextBlock Text="&#xE768;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
-            <MenuItem Header="Pause" Command="{Binding PauseCommand}"><MenuItem.Icon><TextBlock Text="&#xE769;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
-            <Separator/>
-            <MenuItem Header="Copy address" Click="CopyAddress_Click"><MenuItem.Icon><TextBlock Text="&#xE8C8;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
-            <MenuItem Header="Remove…" Command="{Binding RemoveCommand}"><MenuItem.Icon><TextBlock Text="&#xE74D;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
-          </ContextMenu>
-        </ListView.ContextMenu>
-      </ListView>
+      <Grid Grid.Column="2">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Border x:Name="Banner" Visibility="Collapsed" Margin="12,8,12,0" Padding="16,10" CornerRadius="{DynamicResource Radius.Box}" BorderThickness="1">
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock x:Name="BannerIcon" Text="&#xE73E;" FontFamily="{DynamicResource Font.Icon}" FontSize="16" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <TextBlock Grid.Column="1" x:Name="BannerText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite"/>
+            <StackPanel x:Name="BannerActions" Grid.Column="2" Orientation="Horizontal" Margin="12,0,0,0"/>
+            <Button Grid.Column="3" Content="&#xE711;" Style="{StaticResource Style.Button.Icon}" Width="28" Height="28" Margin="8,-4,-8,-4" ToolTip="Dismiss" AutomationProperties.Name="Dismiss" Click="BannerClose_Click"/>
+          </Grid>
+        </Border>
 
-      <!-- Empty state -->
-      <StackPanel x:Name="EmptyState" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-        <StackPanel.Style>
-          <Style TargetType="StackPanel">
-            <Setter Property="Visibility" Value="Collapsed"/>
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding Items.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </StackPanel.Style>
-        <Image Source="{StaticResource Art.EmptyDownloads}" Width="240" Height="192" RenderOptions.BitmapScalingMode="HighQuality"/>
-        <TextBlock Text="Nothing here yet" Style="{StaticResource Text.Title}" HorizontalAlignment="Center" Margin="0,4,0,4"/>
-        <TextBlock Text="Paste a link, drop one on the floating target, or let the browser extension catch it." Style="{StaticResource Text.Caption}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="340"/>
-        <Button Command="{Binding AddUrlCommand}" HorizontalAlignment="Center" Margin="0,18,0,0" Style="{StaticResource Style.Button.Accent}" Padding="18,0">
-          <StackPanel Orientation="Horizontal">
-            <TextBlock Text="&#xE710;" FontFamily="{DynamicResource Font.Icon}" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <TextBlock Text="Add URL" VerticalAlignment="Center"/>
-          </StackPanel>
-        </Button>
-      </StackPanel>
+        <ListView Grid.Row="1" x:Name="List" ItemsSource="{Binding Items}" SelectionMode="Extended" Background="{DynamicResource Brush.Background}" BorderThickness="0"
+                  Margin="0,4,0,0" AutomationProperties.Name="Downloads" SelectionChanged="List_SelectionChanged" MouseDoubleClick="List_DoubleClick"
+                  GridViewColumnHeader.Click="Header_Click" VirtualizingPanel.IsVirtualizing="True">
+          <ListView.View>
+            <GridView>
+              <GridViewColumn Width="270">
+                <GridViewColumnHeader Content="File name" Tag="Name"/>
+                <GridViewColumn.CellTemplate>
+                  <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                      <Border Width="26" Height="26" CornerRadius="8" Background="{Binding CategoryHue, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Tint}">
+                        <TextBlock Text="{Binding CategoryGlyph}" FontFamily="{DynamicResource Font.Icon}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="{Binding CategoryHue, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Brush}"/>
+                      </Border>
+                      <TextBlock Text="{Binding Name}" Margin="10,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </GridViewColumn.CellTemplate>
+              </GridViewColumn>
+              <GridViewColumn Width="84">
+                <GridViewColumnHeader Content="Size" Tag="SizeBytes"/>
+                <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding SizeText}"/></DataTemplate></GridViewColumn.CellTemplate>
+              </GridViewColumn>
+              <GridViewColumn Width="210" CellTemplate="{StaticResource StatusCell}">
+                <GridViewColumnHeader Content="Status" Tag="StatusText"/>
+              </GridViewColumn>
+              <GridViewColumn Width="80">
+                <GridViewColumnHeader Content="Time left" Tag="EtaText"/>
+                <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding EtaText}"/></DataTemplate></GridViewColumn.CellTemplate>
+              </GridViewColumn>
+              <GridViewColumn Width="100">
+                <GridViewColumnHeader Content="Transfer rate" Tag="SpeedText"/>
+                <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding SpeedText}"/></DataTemplate></GridViewColumn.CellTemplate>
+              </GridViewColumn>
+              <GridViewColumn Width="124">
+                <GridViewColumnHeader Content="Added" Tag="Added"/>
+                <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding AddedText}" Foreground="{DynamicResource Brush.TextMuted}"/></DataTemplate></GridViewColumn.CellTemplate>
+              </GridViewColumn>
+              <GridViewColumn Width="160">
+                <GridViewColumnHeader Content="Description" Tag="Description"/>
+                <GridViewColumn.CellTemplate><DataTemplate><TextBlock Text="{Binding Description}" Foreground="{DynamicResource Brush.TextMuted}" TextTrimming="CharacterEllipsis"/></DataTemplate></GridViewColumn.CellTemplate>
+              </GridViewColumn>
+            </GridView>
+          </ListView.View>
+          <ListView.ContextMenu>
+            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+              <MenuItem Header="Open" Command="{Binding OpenFileCommand}"><MenuItem.Icon><TextBlock Text="&#xE8E5;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+              <MenuItem Header="Show in folder" Command="{Binding OpenFolderCommand}"><MenuItem.Icon><TextBlock Text="&#xE838;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+              <MenuItem Header="Progress window" Click="ShowProgress_Click"><MenuItem.Icon><TextBlock Text="&#xE9D2;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+              <Separator/>
+              <MenuItem Header="Resume" Command="{Binding ResumeCommand}"><MenuItem.Icon><TextBlock Text="&#xE768;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+              <MenuItem Header="Stop" Command="{Binding PauseCommand}"><MenuItem.Icon><TextBlock Text="&#xE71A;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+              <Separator/>
+              <MenuItem Header="Copy address" Click="CopyAddress_Click"><MenuItem.Icon><TextBlock Text="&#xE8C8;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+              <MenuItem Header="Remove…" Command="{Binding RemoveCommand}"><MenuItem.Icon><TextBlock Text="&#xE74D;" Style="{StaticResource Text.MenuIcon}"/></MenuItem.Icon></MenuItem>
+            </ContextMenu>
+          </ListView.ContextMenu>
+        </ListView>
+
+        <!-- Empty state -->
+        <StackPanel x:Name="EmptyState" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,30,0,0">
+          <StackPanel.Style>
+            <Style TargetType="StackPanel">
+              <Setter Property="Visibility" Value="Collapsed"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding Items.Count}" Value="0"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </StackPanel.Style>
+          <Image Source="{StaticResource Art.EmptyDownloads}" Width="220" Height="176" RenderOptions.BitmapScalingMode="HighQuality"/>
+          <TextBlock Text="Nothing here yet" Style="{StaticResource Text.Title}" HorizontalAlignment="Center" Margin="0,4,0,4"/>
+          <TextBlock Text="Copy a link, click Add URL, or let the browser extension catch it." Style="{StaticResource Text.Caption}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="340"/>
+        </StackPanel>
+      </Grid>
     </Grid>
+
+    <!-- Status bar -->
+    <Border Grid.Row="3" Background="{DynamicResource Brush.BackgroundAlt}" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,1,0,0">
+      <StackPanel Orientation="Horizontal" Margin="14,0" VerticalAlignment="Center">
+        <TextBlock Text="&#xE896;" FontFamily="{DynamicResource Font.Icon}" FontSize="12" Foreground="{DynamicResource Brush.AccentText}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBlock Text="{Binding StatusText}" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite"/>
+      </StackPanel>
+    </Border>
   </Grid>
 </Window>

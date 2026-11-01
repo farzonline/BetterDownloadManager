@@ -31,6 +31,26 @@ public class DesignTests
         Directory.GetFiles(Path.Combine(AppDir(), "Views"), "*.xaml").Concat([Path.Combine(AppDir(), "Themes", "Controls.xaml"), Path.Combine(AppDir(), "Themes", "Brand.xaml"), Path.Combine(AppDir(), "Themes", "Art.xaml")]);
 
     [Fact]
+    public void TheExeCarriesTheBrandIcon_SoTheTaskbarAndShortcutsShowIt()
+    {
+        var exe = Path.Combine(AppContext.BaseDirectory, "BDM.App.exe");
+        using var shown = System.Drawing.Icon.ExtractAssociatedIcon(exe)!;
+        using var bmp = shown.ToBitmap();
+        // The brand mark is a logo-green glyph on a near-black tile; Windows' default exe icon has neither.
+        var c = bmp.GetPixel(bmp.Width / 2, bmp.Height * 100 / 256); // on the arrow's shaft
+        Assert.True(c.G > 180 && c.R < 120 && c.B < 160, $"centre pixel {c} is not logo green");
+    }
+
+    [Fact]
+    public void WindowAndTrayIcons_ComeFromTheBrandIcon()
+    {
+        var img = AppIcon.Image(64);
+        Assert.Equal(64, img.PixelWidth);
+        using var tray = AppIcon.TrayIcon();
+        Assert.Equal(32, tray.Width);
+    }
+
+    [Fact]
     public void DarkAndLightThemes_DefineExactlyTheSameKeys()
     {
         var dark = Keys("Themes/Nightfall.xaml");

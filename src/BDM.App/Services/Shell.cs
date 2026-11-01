@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Interop;
+using BDM.App.Settings;
 using BDM.App.ViewModels;
 using BDM.Core.Streams;
 
@@ -33,6 +34,18 @@ public sealed class QualityPickerService : IQualityPicker
         }).Task;
 }
 
+/// <summary>Shows the download dialog for a file caught in the browser, on the UI thread, even while BDM sits in the tray.</summary>
+public sealed class DownloadPromptService(AppSettings settings, ProxyClientProvider clients) : IDownloadPrompt
+{
+    public Task<DownloadPlan?> AskAsync(DownloadPlan proposal, Core.Http.DownloadRequest template) =>
+        Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var dlg = new Views.AddUrlDialog(clients.Get(null), settings, null, clients.Choices("Use the default"), proposal, template);
+            Views.DialogPlacement.Place(dlg);
+            return dlg.ShowDialog() == true ? dlg.Plan : null;
+        }).Task;
+}
+
 /// <summary>Watches the clipboard (WM_CLIPBOARDUPDATE) and reports links worth downloading.</summary>
 public sealed class ClipboardWatcher : IDisposable
 {
@@ -55,7 +68,7 @@ public sealed class ClipboardWatcher : IDisposable
 
     IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == WM_CLIPBOARDUPDATE && _enabled())
+        if (msg == WM_CLIPBOARDUPDATE && _enabled() && !CopiedByThisApp())
         {
             string? text = null;
             for (var attempt = 0; attempt < 3 && text == null; attempt++)
@@ -68,6 +81,15 @@ public sealed class ClipboardWatcher : IDisposable
         return IntPtr.Zero;
     }
 
+    /// <summary>"Copy address" in BDM must not offer that link back as a new download.</summary>
+    static bool CopiedByThisApp()
+    {
+        var owner = GetClipboardOwner();
+        return owner != IntPtr.Zero && GetWindowThreadProcessId(owner, out var pid) != 0 && pid == (uint)Environment.ProcessId;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetClipboardOwner();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)] static extern bool AddClipboardFormatListener(IntPtr hwnd);
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)] static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
 

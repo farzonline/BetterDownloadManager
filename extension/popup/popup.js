@@ -32,7 +32,7 @@ function render(tabId, items) {
     const send = async (ask) => {
       status.textContent = 'Sending…';
       const r = await chrome.runtime.sendMessage({ type: 'download', tabId, itemId: item.id, ask });
-      status.textContent = r?.ok ? 'Sent to BDM' : (r?.error ?? 'Failed');
+      status.textContent = r?.viaBrowser ? 'Downloading in your browser' : r?.ok ? 'Sent to BDM' : (r?.error ?? 'Failed');
     };
     const btn = (label, onClick, primary) => {
       const b = Object.assign(document.createElement('button'), { textContent: label, disabled: !!item.protected });

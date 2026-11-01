@@ -14,10 +14,15 @@ public interface IQualityPicker
 }
 
 /// <summary>Turns messages from the browser extension (and second launches) into downloads.</summary>
-public sealed class HostMessageHandler(DownloadManager manager, AppSettings settings, IQualityPicker picker)
+/// <param name="prompt">The download dialog shown before a file from the browser starts; null = never ask.</param>
+/// <param name="probe">Looks a file from the browser up first, to learn whether the site lets BDM fetch it; null = don't check.</param>
+public sealed class HostMessageHandler(DownloadManager manager, AppSettings settings, IQualityPicker picker, IDownloadPrompt? prompt = null,
+    Func<DownloadRequest, Task<FileProbe>>? probe = null)
 {
     public AppSettings Settings => settings;
     public event Action? Activated;
+    /// <summary>A file download the owner started from the download dialog (the app opens its progress window).</summary>
+    public event Action<Guid>? Started;
 
     static bool IsDownloadable(Uri u) => u.Scheme is "http" or "https" or "ftp" or "ftps";
 
@@ -27,7 +32,7 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
         {
             case "ping": return Ok();
             case "activate": Activated?.Invoke(); return Ok();
-            case "add": return Add(msg);
+            case "add": return await AddAsync(msg);
             case "addStream":
             case "addStreamAsk": return await AddStreamAsync(msg, ask: msg.Op == "addStreamAsk" || settings.AlwaysAskQuality);
             case "addPage":
@@ -39,16 +44,39 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
     static HostReply Ok() => new(true, null, false);
     static HostReply Fail(string error) => new(false, error, false);
 
-    HostReply Add(HostMessage msg)
+    async Task<HostReply> AddAsync(HostMessage msg)
     {
         if (!Uri.TryCreate(msg.Url, UriKind.Absolute, out var url) || !IsDownloadable(url)) return Fail("That is not a downloadable address.");
-        var name = Categories.NameFromUrl(url);
-        var category = Categories.For(name);
+        var plan = DownloadPlan.Propose(url, settings);
         var headers = (msg.Headers ?? new()).Where(h => !h.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase) && !h.Key.Equals("Cookie", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(h => h.Key, h => h.Value);
         var referer = msg.Headers?.FirstOrDefault(h => h.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase)).Value ?? msg.PageUrl;
-        manager.Add(new DownloadRequest(url, null, referer, headers, msg.Cookie, null, category, Categories.FolderFor(settings, category)));
+        var template = new DownloadRequest(url, null, referer, headers, msg.Cookie, null, plan.Category, plan.Folder);
+        if (await RefusesBdmAsync(template))
+            return new HostReply(false, "This site only lets your browser download the file, so the browser is downloading it.", false, UseBrowser: true);
+        if (prompt != null && settings.ShowDownloadDialog)
+        {
+            // Cancelled still answers Ok: the extension then drops the browser's own copy too, as the owner asked.
+            if (await prompt.AskAsync(plan, template) is not { } chosen) return Ok();
+            plan = chosen;
+        }
+        var id = manager.Add(plan.ApplyTo(template));
+        if (!plan.StartNow) manager.Pause(id);
+        else if (prompt != null && settings.ShowDownloadDialog) Started?.Invoke(id);
         return Ok();
+    }
+
+    /// <summary>
+    /// Bot protection (Cloudflare and the like) refuses anything that isn't a real browser, even with the browser's headers:
+    /// 401/403/429/503 here means hand the file back. Anything else (timeouts, network) is left to BDM's own retries.
+    /// </summary>
+    async Task<bool> RefusesBdmAsync(DownloadRequest template)
+    {
+        if (probe == null) return false;
+        try { await probe(template); return false; }
+        catch (DownloadException e) when (e.Kind == DownloadFailure.AuthExpired) { return true; }
+        catch (HttpRequestException e) when ((int?)e.StatusCode is 401 or 403 or 429 or 503) { return true; }
+        catch (Exception e) when (e is HttpRequestException or DownloadException or OperationCanceledException or IOException) { return false; }
     }
 
     async Task<HostReply> AddStreamAsync(HostMessage msg, bool ask)

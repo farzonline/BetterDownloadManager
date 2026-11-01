@@ -34,6 +34,10 @@ public sealed class MainViewModel : ObservableObject
         RemoveCommand = new RelayCommand(() => RemoveRequested?.Invoke(), () => _selection.Count > 0);
         OpenFileCommand = new RelayCommand(() => _shell.Open(_selection[0].FilePath!), () => _selection is [{ HasFile: true }]);
         OpenFolderCommand = new RelayCommand(() => _shell.ShowInFolder(_selection[0].FilePath!), () => _selection is [{ HasFile: true }]);
+        StopAllCommand = new RelayCommand(() => ForAll(i => i.CanPause, _manager.Pause), () => _all.Any(i => i.CanPause));
+        StartQueueCommand = new RelayCommand(() => ForAll(i => i.CanResume && i.StateKind != "protected", _manager.Resume),
+            () => _all.Any(i => i.CanResume && i.StateKind != "protected"));
+        DeleteCompletedCommand = new RelayCommand(DeleteCompleted, () => _all.Any(i => i.State == DownloadState.Completed));
 
         _manager.Changed += r => _post(() => Apply(r));
         Sync();
@@ -49,6 +53,11 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand RemoveCommand { get; }
     public RelayCommand OpenFileCommand { get; }
     public RelayCommand OpenFolderCommand { get; }
+    public RelayCommand StopAllCommand { get; }
+    /// <summary>Resumes every paused or failed download (not DRM-protected ones).</summary>
+    public RelayCommand StartQueueCommand { get; }
+    /// <summary>Clears finished rows from the list; the files stay.</summary>
+    public RelayCommand DeleteCompletedCommand { get; }
 
     /// <summary>The view shows its add dialog / delete confirmation in response to these.</summary>
     public event Action? AddUrlRequested;
@@ -70,12 +79,16 @@ public sealed class MainViewModel : ObservableObject
     /// <param name="proxyProfileId">Route just this download through that proxy profile; blank = no override.</param>
     public Guid AddUrl(string url, string? proxyProfileId = null)
     {
-        if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https" or "ftp" or "ftps"))
-            throw new ArgumentException("That is not a downloadable address.", nameof(url));
-        var category = Services.Categories.For(Services.Categories.NameFromUrl(uri));
-        return _manager.Add(new DownloadRequest(uri, null, null, new Dictionary<string, string>(), null,
-            string.IsNullOrWhiteSpace(proxyProfileId) ? null : proxyProfileId, category,
-            Services.Categories.FolderFor(_settings, category)));
+        var uri = DownloadPlan.LinkFrom(url) ?? throw new ArgumentException("That is not a downloadable address.", nameof(url));
+        return Add(DownloadPlan.Propose(uri, _settings) with { ProxyProfileId = proxyProfileId });
+    }
+
+    /// <summary>Queues what the download dialog settled; "Download later" leaves it paused.</summary>
+    public Guid Add(DownloadPlan plan)
+    {
+        var id = _manager.Add(plan.ApplyTo(new DownloadRequest(plan.Url, null, null, new Dictionary<string, string>(), null, null, null, plan.Folder)));
+        if (!plan.StartNow) _manager.Pause(id);
+        return id;
     }
 
     public void SetSelection(IEnumerable<DownloadItemViewModel> selected)
@@ -101,6 +114,21 @@ public sealed class MainViewModel : ObservableObject
     void ForSelection(Func<DownloadItemViewModel, bool> where, Action<Guid> act)
     {
         foreach (var i in _selection.Where(where).ToList()) act(i.Id);
+    }
+
+    void ForAll(Func<DownloadItemViewModel, bool> where, Action<Guid> act)
+    {
+        foreach (var i in _all.Where(where).ToList()) act(i.Id);
+    }
+
+    void DeleteCompleted()
+    {
+        foreach (var i in _all.Where(i => i.State == DownloadState.Completed).ToList())
+        {
+            _manager.Remove(i.Id, deleteFile: false);
+            _all.Remove(i);
+        }
+        Sync();
     }
 
     void Apply(DownloadRecord r)
@@ -148,5 +176,8 @@ public sealed class MainViewModel : ObservableObject
         RemoveCommand.RaiseCanExecuteChanged();
         OpenFileCommand.RaiseCanExecuteChanged();
         OpenFolderCommand.RaiseCanExecuteChanged();
+        StopAllCommand.RaiseCanExecuteChanged();
+        StartQueueCommand.RaiseCanExecuteChanged();
+        DeleteCompletedCommand.RaiseCanExecuteChanged();
     }
 }

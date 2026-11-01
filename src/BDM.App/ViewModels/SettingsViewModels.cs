@@ -31,6 +31,9 @@ public sealed class OptionsViewModel : ObservableObject
         AlwaysAskQuality = s.AlwaysAskQuality;
         MinimizeToTray = s.MinimizeToTray;
         WatchClipboard = s.WatchClipboard;
+        PasteLinkOnAdd = s.PasteLinkOnAdd;
+        ShowDownloadDialog = s.ShowDownloadDialog;
+        ShowProgressWindow = s.ShowProgressWindow;
         StartWithWindows = s.StartWithWindows;
         EnableLocalApi = s.EnableLocalApi;
         GlobalProxyId = s.GlobalProxyId;
@@ -48,6 +51,9 @@ public sealed class OptionsViewModel : ObservableObject
     public bool AlwaysAskQuality { get; set; }
     public bool MinimizeToTray { get; set; }
     public bool WatchClipboard { get; set; }
+    public bool PasteLinkOnAdd { get; set; }
+    public bool ShowDownloadDialog { get; set; }
+    public bool ShowProgressWindow { get; set; }
     public bool StartWithWindows { get; set; }
     public bool EnableLocalApi { get; set; }
     public string? GlobalProxyId { get; set; }
@@ -70,6 +76,9 @@ public sealed class OptionsViewModel : ObservableObject
         _settings.AlwaysAskQuality = AlwaysAskQuality;
         _settings.MinimizeToTray = MinimizeToTray;
         _settings.WatchClipboard = WatchClipboard;
+        _settings.PasteLinkOnAdd = PasteLinkOnAdd;
+        _settings.ShowDownloadDialog = ShowDownloadDialog;
+        _settings.ShowProgressWindow = ShowProgressWindow;
         _settings.StartWithWindows = StartWithWindows;
         _settings.EnableLocalApi = EnableLocalApi;
         _settings.GlobalProxyId = string.IsNullOrWhiteSpace(GlobalProxyId) ? null : GlobalProxyId;

@@ -23,6 +23,15 @@ public sealed class CategoryBrushConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
 }
 
+/// <summary>Category tree row margin: file types sit one step in, under All Downloads (as in IDM).</summary>
+public sealed class CategoryIndentConverter : IValueConverter
+{
+    public static CategoryIndentConverter Instance { get; } = new();
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        new Thickness(Categories.Types.Contains(value as string ?? "") ? 22 : 2, 1, 2, 1);
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
+}
+
 /// <summary>Colour name (Indigo, Rose...) -> its brush, same parameters as <see cref="CategoryBrushConverter"/>.</summary>
 public sealed class HueBrushConverter : IValueConverter
 {

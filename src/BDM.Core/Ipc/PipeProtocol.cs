@@ -15,14 +15,16 @@ public record HostMessage(
     string? ManifestBody,
     string? Kind);
 
-public record HostReply(bool Ok, string? Error, bool AppStarted);
+/// <param name="UseBrowser">The site refuses BDM (bot protection): the extension lets the browser download it instead.</param>
+public record HostReply(bool Ok, string? Error, bool AppStarted, bool UseBrowser = false);
 
 public static class PipeProtocol
 {
     /// <summary>camelCase, case-insensitive: the same JSON the extension speaks.</summary>
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public static string PipeName => "bdm-ipc-" + Environment.UserName;
+    /// <summary>One per user. BDM_PIPE overrides it, so a test copy can run beside the installed app without talking to it.</summary>
+    public static string PipeName => Environment.GetEnvironmentVariable("BDM_PIPE") is { Length: > 0 } p ? p : "bdm-ipc-" + Environment.UserName;
 }
 
 /// <summary>One request line out, one reply line back, over the app's named pipe.</summary>
