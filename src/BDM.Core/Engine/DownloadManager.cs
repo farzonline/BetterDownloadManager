@@ -15,13 +15,23 @@ public class DownloadManager
     readonly Dictionary<Guid, CancellationTokenSource> _running = new();
     readonly Dictionary<Guid, DateTime> _lastPersist = new();
 
+    readonly HashSet<Guid> _windowStopped = new();
+    readonly HashSet<string> _batchDone = new();
+    readonly Dictionary<string, string> _lastCompleted = new();
+    readonly Timer _tick;
+
     public DownloadOptions BaseOptions { get; set; } = new();
+    public Func<DateTime> Clock { get; set; } = () => DateTime.Now;
+    public IPowerApi PowerApi { get; set; } = new WindowsPowerApi();
+    /// <summary>Program launched by the RunProgram post-action.</summary>
+    public string? PostProgram { get; set; }
     public event Action<DownloadRecord>? Changed;
 
     public DownloadManager(DownloadStore store, Func<string?, HttpClient> httpFor)
     {
         _store = store;
         _httpFor = httpFor;
+        _tick = new Timer(_ => Tick(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
         _records = store.All().ToDictionary(r => r.Id);
         // A crash can leave Running rows behind: nothing is running now, so park them as Paused.
         foreach (var r in _records.Values.Where(r => r.State == DownloadState.Running).ToList())
@@ -87,10 +97,46 @@ public class DownloadManager
                 try { File.Delete(p); } catch (IOException) { }
     }
 
+    /// <summary>Re-queues downloads that failed for network reasons (called when connectivity returns).</summary>
+    public void ResumeNetworkFailures()
+    {
+        foreach (var r in All().Where(r => r.State == DownloadState.Failed && r.Failure == DownloadFailure.Network))
+            Resume(r.Id);
+    }
+
+    public void Watch(ConnectivityWatcher watcher) => watcher.NetworkRestored += ResumeNetworkFailures;
+
+    /// <summary>Applies queue schedules: stops running downloads of closed queues, starts queued ones of open queues.</summary>
+    public void Tick()
+    {
+        foreach (var q in _store.Queues())
+        {
+            if (Scheduler.IsWindowOpen(q, Clock())) { Pump(q.Id); continue; }
+            List<CancellationTokenSource> stop = new();
+            lock (_gate)
+                foreach (var r in _records.Values.Where(r => r.QueueId == q.Id && r.State == DownloadState.Running))
+                    if (_running.TryGetValue(r.Id, out var cts)) { _windowStopped.Add(r.Id); stop.Add(cts); }
+            foreach (var cts in stop) cts.Cancel();
+        }
+    }
+
+    void CheckQueueFinished(QueueDefinition q)
+    {
+        string? path;
+        lock (_gate)
+        {
+            if (_records.Values.Any(r => r.QueueId == q.Id && r.State is DownloadState.Queued or DownloadState.Running)) return;
+            if (!_batchDone.Remove(q.Id)) return;
+            path = _lastCompleted.GetValueOrDefault(q.Id);
+        }
+        PostActions.Run(q.OnFinish, path, PostProgram, PowerApi);
+    }
+
     /// <summary>Starts queued downloads of a queue until its concurrency limit is reached.</summary>
     void Pump(string queueId)
     {
         var q = _store.Queue(queueId) ?? QueueDefinition.Main;
+        if (!Scheduler.IsWindowOpen(q, Clock())) return;
         var toStart = new List<DownloadRecord>();
         lock (_gate)
         {
@@ -156,11 +202,15 @@ public class DownloadManager
                 return;
             }
             Update(id, r => r with { State = DownloadState.Completed, Downloaded = result.Bytes, Total = result.Bytes, FilePath = result.Path, Error = null }, persist: true);
+            lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = result.Path; }
         }
         catch (OperationCanceledException)
         {
-            // Pause() sets Paused before cancelling; Remove() deletes the row. Anything else (shutdown) parks it as Paused.
-            Update(id, r => r.State == DownloadState.Running ? r with { State = DownloadState.Paused } : r, persist: true);
+            // Pause() sets Paused before cancelling; Remove() deletes the row; a closing schedule window re-queues.
+            // Anything else (shutdown) parks it as Paused.
+            bool windowStop;
+            lock (_gate) windowStop = _windowStopped.Remove(id);
+            Update(id, r => r.State == DownloadState.Running ? r with { State = windowStop ? DownloadState.Queued : DownloadState.Paused } : r, persist: true);
         }
         catch (DownloadException e)
         {
@@ -174,6 +224,7 @@ public class DownloadManager
         {
             lock (_gate) _running.Remove(id);
             Pump(q.Id);
+            CheckQueueFinished(q);
         }
     }
 }
