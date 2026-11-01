@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using BDM.Core.Data;
 using BDM.Core.Files;
+using BDM.Core.Ext;
 using BDM.Core.Ftp;
 using BDM.Core.Http;
 using BDM.Core.Net;
@@ -36,6 +37,10 @@ public class DownloadManager
     /// <summary>One byte budget shared by every segmented download (SetLimit(0) = unlimited). Per-download limits still apply on top.</summary>
     public SpeedLimiter? GlobalLimiter { get; set; }
     public SiteLogins? Logins { get; set; }
+    /// <summary>yt-dlp for video pages BDM can't read directly (null = not set up).</summary>
+    public YtDlpRunner? YtDlp { get; set; }
+    /// <summary>Turns a proxy profile id into a proxy URL for yt-dlp (it runs outside our HttpClient).</summary>
+    public Func<string?, string?>? ProxyUrlFor { get; set; }
     /// <summary>Called (fire and forget, exceptions swallowed) after a download completes: antivirus scan, notifications...</summary>
     public Func<DownloadRecord, Task>? OnCompleted { get; set; }
     public Func<DateTime> Clock { get; set; } = () => DateTime.Now;
@@ -114,6 +119,26 @@ public class DownloadManager
         }
         foreach (var r in added) { _store.Upsert(r); Changed?.Invoke(r); }
         return added.Count;
+    }
+
+    /// <summary>Queues a video-page download handled by yt-dlp.</summary>
+    public Guid AddYtDlp(Uri pageUrl, StreamChoice choice, string destinationDir, IReadOnlyDictionary<string, string>? headers, string? cookie, string queueId = "main")
+    {
+        var other = (headers ?? new Dictionary<string, string>()).Where(h => !h.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase) && !h.Key.Equals("Cookie", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(h => h.Key, h => h.Value);
+        var referer = headers?.FirstOrDefault(h => h.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase)).Value;
+        var request = new DownloadRequest(pageUrl, null, referer, other, cookie, null, "Video", destinationDir);
+        DownloadRecord rec;
+        lock (_gate)
+        {
+            rec = new DownloadRecord(Guid.NewGuid(), request, DownloadState.Queued, 0, null, null, queueId, DateTime.UtcNow,
+                Duplicate: _records.Values.Any(x => x.Request.Url == pageUrl), YtDlpFormat: choice.Video.Id);
+            _records[rec.Id] = rec;
+        }
+        _store.Upsert(rec);
+        Changed?.Invoke(rec);
+        Pump(queueId);
+        return rec.Id;
     }
 
     /// <summary>JSON dump of every download and queue (settings export / backup).</summary>
@@ -274,6 +299,21 @@ public class DownloadManager
         try
         {
             var rec = Get(id)!;
+            if (rec.YtDlpFormat != null)
+            {
+                var yt = YtDlp ?? throw new YtDlpMissingException("yt-dlp is not set up. Set its path in Options > Tools, then resume.");
+                var headers = rec.Request.Headers.ToDictionary(h => h.Key, h => h.Value);
+                if (rec.Request.Referer != null) headers["Referer"] = rec.Request.Referer;
+                if (rec.Request.CookieHeader != null) headers["Cookie"] = rec.Request.CookieHeader;
+                var proxyUrl = ProxyUrlFor?.Invoke(ProxyIdFor(rec.Request.Category ?? "Video", q.Id, rec.Request.ProxyProfileId));
+                var file = await yt.DownloadAsync(rec.Request.Url, rec.YtDlpFormat, rec.Request.DestinationDir, headers,
+                    new SyncProgress(p => Update(id, r => r with { Downloaded = p.Downloaded, Total = p.Total ?? r.Total }, persist: false)), ct, proxyUrl);
+                var size = new FileInfo(file).Length;
+                lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = file; } // before the state flips, see above
+                Update(id, r => r with { State = DownloadState.Completed, Downloaded = size, Total = size, FilePath = file, Error = null }, persist: true);
+                FireCompleted(id);
+                return;
+            }
             if (rec.Stream != null)
             {
                 var streams = StreamDownloaderFor(ProxyIdFor(rec.Request.Category ?? "Video", q.Id, rec.Request.ProxyProfileId))

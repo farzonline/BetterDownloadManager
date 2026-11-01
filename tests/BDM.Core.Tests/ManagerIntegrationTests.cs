@@ -1,6 +1,7 @@
 using System.Text;
 using BDM.Core.Data;
 using BDM.Core.Engine;
+using BDM.Core.Ext;
 using BDM.Core.Http;
 using BDM.Core.Net;
 using BDM.Core.Streams;
@@ -161,5 +162,69 @@ public class ManagerIntegrationTests
         Assert.Equal(DownloadState.Paused, m.Get(rec.Id)!.State); // nothing is running yet, so it cannot be "Running"
         Assert.Contains(rec.Id, seen);
         Assert.Equal(0, m.ReloadFromStore());
+    }
+
+    sealed class FakeYtDlp(Func<IReadOnlyList<string>, (int Exit, string Err)> behave) : IYtDlpProcess
+    {
+        public List<IReadOnlyList<string>> Calls { get; } = new();
+        public Task<(int Exit, string StdOut, string StdErr)> RunAsync(IReadOnlyList<string> args, Action<string>? onLine, CancellationToken ct)
+        {
+            Calls.Add(args);
+            var (exit, err) = behave(args);
+            if (exit == 0)
+            {
+                var dir = Path.GetDirectoryName(args[args.ToList().IndexOf("-o") + 1])!;
+                var file = Path.Combine(dir, "Clip.mp4");
+                File.WriteAllBytes(file, new byte[4096]);
+                onLine?.Invoke("BDMPROGRESS 2048 4096 NA");
+                onLine?.Invoke("BDMFILE " + file);
+            }
+            return Task.FromResult((exit, "", err));
+        }
+    }
+
+    [Fact]
+    public async Task Manager_YtDlpJob_CompletesAndRoutesThroughTheProxy()
+    {
+        var (m, _, _) = Make();
+        var fake = new FakeYtDlp(_ => (0, ""));
+        m.YtDlp = new YtDlpRunner(() => "yt-dlp.exe", _ => fake);
+        m.GlobalProxyId = "p1";
+        m.ProxyUrlFor = id => id == "p1" ? "socks5://u:pw@h:1080" : null;
+        var choice = new BDM.Core.Streams.StreamChoice("720p", new BDM.Core.Streams.StreamTrack("bv*[height<=720]+ba/b[height<=720]", new Uri("https://v.example/watch?v=1")), null, []);
+
+        var id = m.AddYtDlp(new Uri("https://v.example/watch?v=1"), choice, Tmp(), new Dictionary<string, string> { ["Referer"] = "https://v.example/" }, "a=b");
+
+        var done = await WaitFor(m, id, r => r.State is DownloadState.Completed or DownloadState.Failed);
+        Assert.True(done.State == DownloadState.Completed, done.Error);
+        Assert.EndsWith("Clip.mp4", done.FilePath);
+        Assert.Equal(4096, done.Total);
+        var args = fake.Calls.Single();
+        Assert.Equal("bv*[height<=720]+ba/b[height<=720]", args[args.ToList().IndexOf("-f") + 1]);
+        Assert.Equal("socks5://u:pw@h:1080", args[args.ToList().IndexOf("--proxy") + 1]);
+        Assert.Contains("Cookie: a=b", args);
+        Assert.Contains("Referer: https://v.example/", args);
+    }
+
+    [Fact]
+    public async Task Manager_YtDlpJob_Failure_ShowsYtDlpsOwnMessage()
+    {
+        var (m, _, _) = Make();
+        m.YtDlp = new YtDlpRunner(() => "yt-dlp.exe", _ => new FakeYtDlp(_ => (1, "ERROR: This video is private")));
+        var choice = new BDM.Core.Streams.StreamChoice("Best", new BDM.Core.Streams.StreamTrack("b", new Uri("https://v.example/w")), null, []);
+        var id = m.AddYtDlp(new Uri("https://v.example/w"), choice, Tmp(), null, null);
+        var failed = await WaitFor(m, id, r => r.State == DownloadState.Failed);
+        Assert.Contains("private", failed.Error);
+    }
+
+    [Fact]
+    public async Task Manager_YtDlpJob_NotConfigured_FailsWithAnActionableMessage()
+    {
+        var (m, _, _) = Make();
+        var choice = new BDM.Core.Streams.StreamChoice("Best", new BDM.Core.Streams.StreamTrack("b", new Uri("https://v.example/w")), null, []);
+        var id = m.AddYtDlp(new Uri("https://v.example/w"), choice, Tmp(), null, null);
+        var failed = await WaitFor(m, id, r => r.State == DownloadState.Failed);
+        Assert.Contains("yt-dlp", failed.Error);
+        Assert.Contains("Options", failed.Error);
     }
 }

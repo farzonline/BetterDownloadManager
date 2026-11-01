@@ -24,4 +24,5 @@ public record DownloadRecord(
     bool Duplicate = false,
     string? ExpectedSha256 = null,
     StreamSource? Stream = null,
-    StreamChoice? StreamChoice = null);
+    StreamChoice? StreamChoice = null,
+    string? YtDlpFormat = null);
