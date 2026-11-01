@@ -11,7 +11,7 @@ public record DownloadProgress(long Downloaded, long? Total, double BytesPerSec,
 
 public record DownloadResult(string Path, long Bytes);
 
-public enum DownloadFailure { Network, AuthExpired, DiskFull, ServerChanged }
+public enum DownloadFailure { Network, AuthExpired, DiskFull, ServerChanged, Protected }
 
 public class DownloadException(DownloadFailure kind, string message, Exception? inner = null) : Exception(message, inner)
 {

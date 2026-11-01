@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using BDM.Core.Data;
 using BDM.Core.Files;
 using BDM.Core.Http;
+using BDM.Core.Streams;
 
 namespace BDM.Core.Engine;
 
@@ -21,6 +22,9 @@ public class DownloadManager
     readonly Timer _tick;
 
     public DownloadOptions BaseOptions { get; set; } = new();
+    /// <summary>Needed for stream (HLS/DASH) jobs; set by the app once ffmpeg handling is configured.</summary>
+    public StreamDownloader? Streams { get; set; }
+    public StreamOptions StreamOptions { get; set; } = new();
     public Func<DateTime> Clock { get; set; } = () => DateTime.Now;
     public IPowerApi PowerApi { get; set; } = new WindowsPowerApi();
     /// <summary>Program launched by the RunProgram post-action.</summary>
@@ -60,6 +64,27 @@ public class DownloadManager
         Pump(queueId);
         return rec.Id;
     }
+
+    /// <summary>Queues an HLS/DASH download. The request URL is the manifest; the finished file is a remuxed .mp4.</summary>
+    public Guid AddStream(StreamSource source, StreamChoice choice, string destinationDir, string queueId = "main")
+    {
+        var request = new DownloadRequest(source.ManifestUrl, null, source.Headers.GetValueOrDefault("Referer"),
+            source.Headers.Where(h => h.Key != "Referer").ToDictionary(h => h.Key, h => h.Value), source.CookieHeader, null, null, destinationDir);
+        DownloadRecord rec;
+        lock (_gate)
+        {
+            rec = new DownloadRecord(Guid.NewGuid(), request, DownloadState.Queued, 0, null, null, queueId, DateTime.UtcNow,
+                Duplicate: _records.Values.Any(x => x.Request.Url == request.Url), Stream: source, StreamChoice: choice);
+            _records[rec.Id] = rec;
+        }
+        _store.Upsert(rec);
+        Changed?.Invoke(rec);
+        Pump(queueId);
+        return rec.Id;
+    }
+
+    /// <summary>JSON dump of every download and queue (settings export / backup).</summary>
+    public string ExportAll() => _store.Export();
 
     public void Pause(Guid id)
     {
@@ -187,6 +212,16 @@ public class DownloadManager
         try
         {
             var rec = Get(id)!;
+            if (rec.Stream != null)
+            {
+                var streams = Streams ?? throw new InvalidOperationException("Stream downloads are not configured.");
+                var path = await streams.DownloadAsync(rec.Stream, rec.StreamChoice!, rec.Request.DestinationDir,
+                    new SyncProgress(p => Update(id, r => r with { Downloaded = p.Downloaded }, persist: false)), ct, StreamOptions);
+                var length = new FileInfo(path).Length;
+                Update(id, r => r with { State = DownloadState.Completed, Downloaded = length, Total = length, FilePath = path, Error = null }, persist: true);
+                lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = path; }
+                return;
+            }
             var http = _httpFor(rec.Request.ProxyProfileId);
             var probe = await Prober.ProbeAsync(http, rec.Request, ct);
             Update(id, r => r with { Total = probe.Length, FilePath = Path.Combine(r.Request.DestinationDir, probe.FileName) }, persist: true);
@@ -211,6 +246,10 @@ public class DownloadManager
             bool windowStop;
             lock (_gate) windowStop = _windowStopped.Remove(id);
             Update(id, r => r.State == DownloadState.Running ? r with { State = windowStop ? DownloadState.Queued : DownloadState.Paused } : r, persist: true);
+        }
+        catch (ProtectedContentException e)
+        {
+            Update(id, r => r with { State = DownloadState.Failed, Failure = DownloadFailure.Protected, Error = e.Message }, persist: true);
         }
         catch (DownloadException e)
         {

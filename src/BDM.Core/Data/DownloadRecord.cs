@@ -1,5 +1,6 @@
 using BDM.Core.Engine;
 using BDM.Core.Http;
+using BDM.Core.Streams;
 
 namespace BDM.Core.Data;
 
@@ -21,4 +22,6 @@ public record DownloadRecord(
     DownloadFailure? Failure = null,
     string? FilePath = null,
     bool Duplicate = false,
-    string? ExpectedSha256 = null);
+    string? ExpectedSha256 = null,
+    StreamSource? Stream = null,
+    StreamChoice? StreamChoice = null);
