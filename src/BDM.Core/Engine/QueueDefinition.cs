@@ -9,7 +9,8 @@ public record QueueDefinition(
     int Connections,
     TimeSpan? StartAt,
     TimeSpan? StopAt,
-    PostAction OnFinish)
+    PostAction OnFinish,
+    string? ProxyProfileId = null)
 {
     public static QueueDefinition Main { get; } = new("main", "Main download queue", 3, 8, null, null, PostAction.None);
 }

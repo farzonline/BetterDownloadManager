@@ -30,6 +30,9 @@ public static class Prober
             using var get = req.CreateMessage(HttpMethod.Get);
             get.Headers.Range = new RangeHeaderValue(0, 0);
             using var r = await http.SendAsync(get, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (r.StatusCode == HttpStatusCode.ProxyAuthenticationRequired)
+                throw new Engine.DownloadException(Engine.DownloadFailure.Network,
+                    "Proxy authentication failed (407). Check the proxy username and password.");
             r.EnsureSuccessStatusCode();
             if (r.StatusCode == HttpStatusCode.PartialContent)
             {
