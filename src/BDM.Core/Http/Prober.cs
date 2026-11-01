@@ -33,6 +33,9 @@ public static class Prober
             if (r.StatusCode == HttpStatusCode.ProxyAuthenticationRequired)
                 throw new Engine.DownloadException(Engine.DownloadFailure.Network,
                     "Proxy authentication failed (407). Check the proxy username and password.");
+            if (r.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new Engine.DownloadException(Engine.DownloadFailure.AuthExpired,
+                    $"The server refused access ({(int)r.StatusCode}); the link may have expired or needs a login.");
             r.EnsureSuccessStatusCode();
             if (r.StatusCode == HttpStatusCode.PartialContent)
             {

@@ -29,6 +29,9 @@ public sealed class TestServer : IAsyncDisposable
     /// <summary>Ranges starting at or beyond this offset are served slowly.</summary>
     public long SlowFromOffset { get; set; } = long.MaxValue;
     public int SlowDelayMs { get; set; } = 15;
+    /// <summary>When set, requests without exactly this Authorization header get 401.</summary>
+    public string? RequiredAuthorization { get; set; }
+    public List<string?> Authorizations { get; } = new();
     public long BytesServed => Interlocked.Read(ref _bytesServed);
     public Uri BaseUri { get; private set; } = null!;
     public Uri FileUrl => new(BaseUri, "/file");
@@ -58,6 +61,9 @@ public sealed class TestServer : IAsyncDisposable
         var req = ctx.Request;
         var res = ctx.Response;
         var isHead = HttpMethods.IsHead(req.Method);
+        var auth = req.Headers.Authorization.Count > 0 ? req.Headers.Authorization[0] : null;
+        lock (Authorizations) Authorizations.Add(auth);
+        if (RequiredAuthorization != null && auth != RequiredAuthorization) { res.StatusCode = 401; return; }
         if (isHead && RejectHead) { res.StatusCode = 405; return; }
         if (!isHead)
         {

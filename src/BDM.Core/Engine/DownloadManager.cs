@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using BDM.Core.Data;
 using BDM.Core.Files;
+using BDM.Core.Ftp;
 using BDM.Core.Http;
+using BDM.Core.Net;
 using BDM.Core.Streams;
 
 namespace BDM.Core.Engine;
@@ -26,6 +28,16 @@ public class DownloadManager
     /// <summary>Needed for stream (HLS/DASH) jobs; set by the app once ffmpeg handling is configured.</summary>
     public StreamDownloader? Streams { get; set; }
     public StreamOptions StreamOptions { get; set; } = new();
+    /// <summary>Builds a stream downloader around the (possibly proxied) HttpClient; overrides <see cref="Streams"/> when set.</summary>
+    public Func<HttpClient, StreamDownloader>? StreamsFor { get; set; }
+    /// <summary>Category name -> proxy profile id.</summary>
+    public Dictionary<string, string> CategoryProxies { get; } = new();
+    public string? GlobalProxyId { get; set; }
+    /// <summary>One byte budget shared by every segmented download (SetLimit(0) = unlimited). Per-download limits still apply on top.</summary>
+    public SpeedLimiter? GlobalLimiter { get; set; }
+    public SiteLogins? Logins { get; set; }
+    /// <summary>Called (fire and forget, exceptions swallowed) after a download completes: antivirus scan, notifications...</summary>
+    public Func<DownloadRecord, Task>? OnCompleted { get; set; }
     public Func<DateTime> Clock { get; set; } = () => DateTime.Now;
     public IPowerApi PowerApi { get; set; } = new WindowsPowerApi();
     /// <summary>Program launched by the RunProgram post-action.</summary>
@@ -89,6 +101,28 @@ public class DownloadManager
 
     /// <summary>JSON dump of every download and queue (settings export / backup).</summary>
     public string ExportAll() => _store.Export();
+
+    /// <summary>Proxy profile for a download: the download itself, then its queue, then its category, then the global default.</summary>
+    public string? ProxyIdFor(string? category, string queueId, string? downloadProfile = null)
+    {
+        var q = _store.Queue(queueId) ?? QueueDefinition.Main;
+        return downloadProfile ?? q.ProxyProfileId
+            ?? (category != null && CategoryProxies.TryGetValue(category, out var c) ? c : null)
+            ?? GlobalProxyId;
+    }
+
+    public StreamDownloader? StreamDownloaderFor(string? proxyId) => StreamsFor != null ? StreamsFor(_httpFor(proxyId)) : Streams;
+
+    void FireCompleted(Guid id)
+    {
+        var hook = OnCompleted;
+        if (hook == null) return;
+        _ = Task.Run(async () =>
+        {
+            try { if (Get(id) is { } rec) await hook(rec); }
+            catch (Exception) { /* a failing scanner must not affect the download */ }
+        });
+    }
 
     public void Pause(Guid id)
     {
@@ -203,6 +237,13 @@ public class DownloadManager
         return updated;
     }
 
+    /// <summary>Adds Basic auth from the saved site logins unless the request already carries an Authorization header.</summary>
+    DownloadRequest WithLogin(DownloadRequest r)
+    {
+        if (Logins?.AuthorizationFor(r.Url) is not { } auth || r.Headers.Keys.Any(k => k.Equals("Authorization", StringComparison.OrdinalIgnoreCase))) return r;
+        return r with { Headers = new Dictionary<string, string>(r.Headers) { ["Authorization"] = auth } };
+    }
+
     sealed class SyncProgress(Action<DownloadProgress> on) : IProgress<DownloadProgress>
     {
         public void Report(DownloadProgress v) => on(v);
@@ -218,7 +259,8 @@ public class DownloadManager
             var rec = Get(id)!;
             if (rec.Stream != null)
             {
-                var streams = Streams ?? throw new InvalidOperationException("Stream downloads are not configured.");
+                var streams = StreamDownloaderFor(ProxyIdFor(rec.Request.Category ?? "Video", q.Id, rec.Request.ProxyProfileId))
+                    ?? throw new InvalidOperationException("Stream downloads are not configured.");
                 var path = await streams.DownloadAsync(rec.Stream, rec.StreamChoice!, rec.Request.DestinationDir,
                     new SyncProgress(p => Update(id, r => r with { Downloaded = p.Downloaded }, persist: false)), ct, StreamOptions);
                 var length = new FileInfo(path).Length;
@@ -226,19 +268,28 @@ public class DownloadManager
                 // done without also seeing the flag, or the post-action could fire twice.
                 lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = path; }
                 Update(id, r => r with { State = DownloadState.Completed, Downloaded = length, Total = length, FilePath = path, Error = null }, persist: true);
+                FireCompleted(id);
                 return;
             }
-            var http = _httpFor(rec.Request.ProxyProfileId);
-            var probe = await Prober.ProbeAsync(http, rec.Request, ct);
-            Update(id, r => r with { Total = probe.Length, FilePath = Path.Combine(r.Request.DestinationDir, probe.FileName) }, persist: true);
-
-            var opts = BaseOptions with { Connections = q.Connections };
+            var req = WithLogin(rec.Request);
+            var http = _httpFor(ProxyIdFor(req.Category, q.Id, req.ProxyProfileId));
             var progress = new SyncProgress(p =>
             {
                 lock (_gate) { if (p.Segments.Count > 0) _segments[id] = p.Segments; }
                 Update(id, r => r with { Downloaded = p.Downloaded, Total = p.Total ?? r.Total }, persist: false);
             });
-            var result = await new SegmentedDownloader(http).RunAsync(rec.Request, probe, opts, progress, ct);
+            DownloadResult result;
+            if (req.Url.Scheme is "ftp" or "ftps")
+            {
+                result = await new FtpDownloader().RunAsync(req, progress, ct);
+            }
+            else
+            {
+                var probe = await Prober.ProbeAsync(http, req, ct);
+                Update(id, r => r with { Total = probe.Length, FilePath = Path.Combine(r.Request.DestinationDir, probe.FileName) }, persist: true);
+                var opts = BaseOptions with { Connections = q.Connections };
+                result = await new SegmentedDownloader(http, GlobalLimiter).RunAsync(req, probe, opts, progress, ct);
+            }
 
             if (rec.ExpectedSha256 is { } want &&
                 !string.Equals(await Checksum.ComputeAsync(result.Path, HashAlgorithmName.SHA256), want, StringComparison.OrdinalIgnoreCase))
@@ -248,6 +299,7 @@ public class DownloadManager
             }
             lock (_gate) { _batchDone.Add(q.Id); _lastCompleted[q.Id] = result.Path; } // before the state flips, see above
             Update(id, r => r with { State = DownloadState.Completed, Downloaded = result.Bytes, Total = result.Bytes, FilePath = result.Path, Error = null }, persist: true);
+            FireCompleted(id);
         }
         catch (OperationCanceledException)
         {

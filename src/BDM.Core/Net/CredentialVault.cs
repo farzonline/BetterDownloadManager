@@ -26,6 +26,15 @@ public sealed class CredentialVault(string path)
         }
     }
 
+    public void Remove(string key)
+    {
+        lock (_gate)
+        {
+            var d = Read();
+            if (d.Remove(key)) File.WriteAllText(path, JsonSerializer.Serialize(d));
+        }
+    }
+
     public string? Load(string key)
     {
         lock (_gate)
