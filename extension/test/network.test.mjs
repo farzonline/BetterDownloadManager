@@ -72,3 +72,25 @@ test('partial responses report the full size from Content-Range', async () => {
   await recv(det, { statusCode: 206, responseHeaders: [hdr('Content-Type', 'video/mp4'), hdr('Content-Range', 'bytes 0-99/5000')], url: 'https://cdn/v' });
   assert.equal(registry.list(1)[0].size, 5000);
 });
+
+test('service-worker traffic (tabId -1) is attributed to tabs of the initiator origin', async () => {
+  const registry = createRegistry();
+  const det = createNetworkDetector({
+    registry,
+    getTab: (id) => ({ url: `https://site.example/tab${id}`, title: `T${id}` }),
+    getTabsByOrigin: (origin) => (origin === 'https://site.example' ? [5, 6] : []),
+    probe: async () => undefined,
+    selfOrigin: 'chrome-extension://abc',
+  });
+  await det.onHeadersReceived({
+    requestId: 'sw1', tabId: -1, url: 'https://cdn/m.m3u8', statusCode: 200, initiator: 'https://site.example',
+    responseHeaders: [{ name: 'Content-Type', value: 'application/vnd.apple.mpegurl' }],
+  });
+  await det.onHeadersReceived({
+    requestId: 'sw2', tabId: -1, url: 'https://cdn/m2.m3u8', statusCode: 200, initiator: 'https://unrelated.example',
+    responseHeaders: [{ name: 'Content-Type', value: 'application/vnd.apple.mpegurl' }],
+  });
+  assert.equal(registry.list(5).length, 1);
+  assert.equal(registry.list(6).length, 1);
+  assert.equal(registry.list(5)[0].pageUrl, 'https://site.example/tab5');
+});

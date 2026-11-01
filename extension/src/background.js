@@ -2,6 +2,7 @@ import { createRegistry } from './detect/registry.js';
 import { createNetworkDetector } from './detect/network.js';
 import { DEFAULT_SETTINGS, takeOverDownload } from './takeover.js';
 import { buildMessage, sendToHost } from './host.js';
+import { handlePageMessage, pickBest } from './detect/page.js';
 
 const ALT_WINDOW_MS = 10_000;
 const altClicks = new Map(); // url -> timestamp
@@ -36,6 +37,7 @@ async function probe(url, headers) {
 const detector = createNetworkDetector({
   registry,
   getTab: (id) => tabs.get(id),
+  getTabsByOrigin: (origin) => [...tabs].filter(([, t]) => { try { return new URL(t.url).origin === origin; } catch { return false; } }).map(([id]) => id),
   probe,
   selfOrigin: `chrome-extension://${chrome.runtime.id}`,
 });
@@ -75,6 +77,17 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   (async () => {
     await ready;
     if (msg.type === 'alt-click') { altClicks.set(msg.url, Date.now()); return {}; }
+    if (msg.type === 'page') { handlePageMessage(msg.payload, sender, { registry }); return {}; }
+    if (msg.type === 'has-items') return { has: !!pickBest(registry.list(sender.tab?.id ?? -1)) };
+    if (msg.type === 'download-best') {
+      const item = pickBest(registry.list(sender.tab?.id ?? -1));
+      if (!item) { notify('No downloadable video found on this page yet.'); return { ok: false }; }
+      try {
+        const r = await sendToHost(await buildMessage(item, { cookies: chrome.cookies }));
+        if (!r.ok) notify(r.error ?? 'BDM is not available.');
+        return r;
+      } catch (e) { notify(String(e.message ?? e)); return { ok: false }; }
+    }
     if (msg.type === 'list') return { items: registry.list(msg.tabId) };
     if (msg.type === 'debug-registry') return registry.snapshot(); // used by the acceptance tests
     if (msg.type === 'download') {

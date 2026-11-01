@@ -73,3 +73,11 @@ test('load restores a persisted list and still dedupes against it', () => {
   assert.equal(r.add(3, item('https://x/b.mp4')).item.id !== '9', true);
   assert.deepEqual(Object.keys(r.snapshot()), ['3']);
 });
+
+test('markProtected flags only the matching frame\'s items', () => {
+  const r = createRegistry();
+  r.add(1, item('https://x/a.mpd', { kind: 'dash', frameUrl: 'https://f/one#a' }));
+  r.add(1, item('https://x/b.mpd', { kind: 'dash', frameUrl: 'https://f/two' }));
+  r.markProtected(1, 'https://f/one#zzz');
+  assert.deepEqual(r.list(1).map((i) => !!i.protected), [true, false]);
+});

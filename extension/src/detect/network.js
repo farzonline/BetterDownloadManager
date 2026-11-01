@@ -7,7 +7,7 @@ const KEEP_HEADERS = {
 };
 const MAX_PENDING = 500;
 
-export function createNetworkDetector({ registry, getTab, probe, selfOrigin }) {
+export function createNetworkDetector({ registry, getTab, getTabsByOrigin = () => [], probe, selfOrigin }) {
   const pending = new Map(); // requestId -> kept request headers
   const probed = new Set(); // dedupeKeys already probed
 
@@ -25,8 +25,10 @@ export function createNetworkDetector({ registry, getTab, probe, selfOrigin }) {
     async onHeadersReceived(d) {
       const headers = pending.get(d.requestId) ?? {};
       pending.delete(d.requestId);
-      if (d.tabId < 0) return; // service-worker / extension traffic is attributed in the page layer
       if (selfOrigin && d.initiator?.startsWith(selfOrigin)) return;
+      // Service-worker requests carry no tab: attribute them to the open tabs of the worker's origin.
+      const tabIds = d.tabId >= 0 ? [d.tabId] : d.initiator ? getTabsByOrigin(d.initiator) : [];
+      if (!tabIds.length) return;
       if (d.statusCode !== 200 && d.statusCode !== 206) return;
 
       const h = {};
@@ -45,10 +47,12 @@ export function createNetworkDetector({ registry, getTab, probe, selfOrigin }) {
 
       const range = /\/(\d+)$/.exec(h['content-range'] ?? '');
       const size = range ? Number(range[1]) : h['content-length'] ? Number(h['content-length']) : undefined;
-      const tab = getTab(d.tabId);
-      registry.add(d.tabId, {
-        kind, url: d.url, frameUrl: d.documentUrl ?? d.initiator, pageUrl: tab?.url, title: tab?.title, headers, size,
-      });
+      for (const tabId of tabIds) {
+        const tab = getTab(tabId);
+        registry.add(tabId, {
+          kind, url: d.url, frameUrl: d.documentUrl ?? d.initiator, pageUrl: tab?.url, title: tab?.title, headers, size, via: 'network',
+        });
+      }
     },
   };
 }

@@ -40,11 +40,28 @@
         "<all_urls>"
       ],
       "js": [
-        "src/altclick.js"
+        "src/detect/page-hook.js"
       ],
       "run_at": "document_start",
       "all_frames": true,
-      "match_about_blank": true
+      "match_about_blank": true,
+      "match_origin_as_fallback": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/altclick.js",
+        "src/detect/dom-scan.js",
+        "src/detect/float-button.js",
+        "src/detect/bridge.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ],
   "icons": {

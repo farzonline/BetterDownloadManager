@@ -47,6 +47,13 @@ export function createRegistry({ onChange } = {}) {
       tabs.delete(tabId);
       onChange?.(tabId, 0);
     },
+    /** Flags DRM for the items found in one frame (matched by origin + path; the fragment is ignored). */
+    markProtected(tabId, frameUrl) {
+      const norm = (u) => { try { const x = new URL(u); return x.origin + x.pathname; } catch { return u; } };
+      for (const it of tabs.get(tabId)?.values() ?? []) {
+        if (!frameUrl || (it.frameUrl && norm(it.frameUrl) === norm(frameUrl))) it.protected = true;
+      }
+    },
     /** Restores a persisted list (service workers lose memory when they sleep). */
     load(tabId, items) {
       const b = bucket(tabId);
