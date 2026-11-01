@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Better Download Manager",
+  "version": "0.1.0",
+  "description": "Sends downloads and detected video streams to Better Download Manager.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAl5FsZR7w2ciqLX6kuhduPJlKi+7gkF0z7sXUFolQPYiG71m0orp6hMPI9VsvTv9hIo0gw6VH9avxlv6Z90qcRUL7KTRVEnm1/6MybHntTScgInx/FgvlTEDgt/9tWs9yZjtJWQrd2NJZCBuBvodJLbFSNBI9D4WaKnLiBJwUb2TehlZrILfyfazl9AAKQe5kfbIOsBMAZAxdunZse4cnFL1MReLSj87WLXWBLoyDfblaOTeJAEtWMlor0yjJ9/sWGIklBMSUoOiMe7N/Zc+Ex5SYfbwGx5Bve+qehfmBFDqPhaL0xFNNEBzzHHhuAZPYHKD3AhFS0t5GPip7AJwTvwIDAQAB",
+  "minimum_chrome_version": "111",
+  "permissions": [
+    "webRequest",
+    "downloads",
+    "nativeMessaging",
+    "storage",
+    "tabs",
+    "scripting",
+    "contextMenus",
+    "cookies",
+    "notifications"
+  ],
+  "optional_permissions": [
+    "debugger"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Better Download Manager",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "128": "icon.png"
+    }
+  },
+  "options_page": "options/options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/altclick.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "icons": {
+    "128": "icon.png"
+  }
+}
