@@ -40,6 +40,9 @@
   .protected { color: var(--warn); }
   button { font: inherit; padding: 5px 12px; margin: 0 6px 4px 0; border: 1px solid var(--line); border-radius: 9px; background: var(--raised); color: var(--fg); cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--muted); }
+  button { transition: transform .28s cubic-bezier(.34, 1.8, .64, 1), background-color .15s, border-color .15s; }
+  button:active:not(:disabled) { transform: scale(.94); transition-duration: .07s; }
+  button.done { border-color: #10b981; color: #10b981; }
   button:focus-visible { outline: 2px solid #38d9f5; outline-offset: 2px; }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; box-shadow: 0 4px 14px rgba(124, 108, 255, .35); }
   button:disabled { opacity: .5; cursor: default; box-shadow: none; }

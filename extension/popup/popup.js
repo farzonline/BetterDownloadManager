@@ -42,7 +42,13 @@ function render(tabId, items) {
     };
     const buttons = [btn('Download', () => send(false), true)];
     if (item.kind === 'hls' || item.kind === 'dash') buttons.push(btn('Choose quality…', () => send(true)));
-    buttons.push(Object.assign(btn('Copy URL', () => navigator.clipboard.writeText(item.url)), { disabled: false }));
+    const copy = Object.assign(btn('Copy URL', async () => {
+      await navigator.clipboard.writeText(item.url);
+      copy.textContent = 'Copied ✓';
+      copy.classList.add('done');
+      setTimeout(() => { copy.textContent = 'Copy URL'; copy.classList.remove('done'); }, 1500);
+    }), { disabled: false });
+    buttons.push(copy);
     body.append(title, meta, ...buttons, status);
     row.append(ico, body);
     return row;

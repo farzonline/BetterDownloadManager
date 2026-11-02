@@ -32,6 +32,8 @@ test('cookie_header_attached_for_item_url_in_host_message', async () => {
   assert.equal(m.cookie, 'sid=1; k=v w');
   assert.equal(m.headers.Referer, 'https://p/');
   assert.equal(m.pageUrl, 'https://p/');
+  assert.equal(m.kind, 'video'); // the app names a video after the page title, a plain file after its address
+  assert.equal(m.title, 'T');
 });
 
 test('the browser User-Agent is passed along unless the request already carried one', async () => {

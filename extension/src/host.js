@@ -57,7 +57,7 @@ export async function buildMessage(item, { cookies, askQuality = false, userAgen
     title: item.title,
     headers,
     cookie,
-    kind: stream ? item.kind : undefined,
+    kind: item.kind, // the app names a video after the page title, a plain file after its address
     manifestBody: item.manifestBody,
     canRelay: !stream || undefined, // this extension can fetch files for BDM when a site refuses it (src/relay.js)
   };

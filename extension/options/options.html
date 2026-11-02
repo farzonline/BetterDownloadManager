@@ -32,6 +32,8 @@
   button { font: inherit; padding: 8px 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-weight: 600; cursor: pointer;
     box-shadow: 0 4px 14px rgba(124, 108, 255, .35); }
   button:focus-visible { outline: 2px solid #38d9f5; outline-offset: 2px; }
+  button { transition: transform .28s cubic-bezier(.34, 1.8, .64, 1); }
+  button:active { transform: scale(.94); transition-duration: .07s; }
   #status { color: var(--muted); margin-left: 8px; }
   .tip { color: var(--muted); }
 </style>

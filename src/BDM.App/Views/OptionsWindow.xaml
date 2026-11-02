@@ -27,6 +27,7 @@
         <CheckBox Content="Fill in a copied link when I click Add URL" IsChecked="{Binding PasteLinkOnAdd}" Margin="0,8,0,0"/>
         <CheckBox Content="Show the download dialog before a browser download starts" ToolTip="Pick the name, folder and a description first, as in IDM" IsChecked="{Binding ShowDownloadDialog}" Margin="0,8,0,0"/>
         <CheckBox Content="Open a progress window for each download I start" IsChecked="{Binding ShowProgressWindow}" Margin="0,8,0,0"/>
+        <CheckBox Content="Show “Download complete” when one of those finishes" IsChecked="{Binding ShowCompleteDialog}" Margin="0,8,0,0"/>
 
         <StackPanel Orientation="Horizontal" Margin="0,28,0,8"><TextBlock Text="&#xE896;" FontFamily="{DynamicResource Font.Icon}" FontSize="13" Foreground="{DynamicResource Brush.AccentText}" Margin="0,0,8,0" VerticalAlignment="Center"/><TextBlock Text="DOWNLOADS" Style="{StaticResource Text.Section}" VerticalAlignment="Center"/></StackPanel>
         <TextBlock Text="Save to" Style="{StaticResource Text.Caption}" Margin="0,0,0,4"/>

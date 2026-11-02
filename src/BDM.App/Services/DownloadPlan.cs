@@ -8,11 +8,19 @@ namespace BDM.App.Services;
 public sealed record DownloadPlan(Uri Url, string SuggestedName, string? FileName, string Folder, string Category,
     string? Description = null, bool StartNow = true, string? ProxyProfileId = null)
 {
-    public static DownloadPlan Propose(Uri url, AppSettings settings)
+    /// <param name="title">The page's title; a video or audio caught on a page is named after it, as IDM does (CDN names are often just numbers).</param>
+    /// <param name="kind">What the extension found: "video", "audio" or "file".</param>
+    public static DownloadPlan Propose(Uri url, AppSettings settings, string? title = null, string? kind = null)
     {
         var name = Categories.NameFromUrl(url);
-        var category = Categories.For(name);
-        return new DownloadPlan(url, name, null, Categories.FolderFor(settings, category), category);
+        string? titled = null;
+        if (kind is "video" or "audio" && !string.IsNullOrWhiteSpace(title))
+        {
+            var ext = Categories.For(name) is "Video" or "Music" ? Path.GetExtension(name) : kind == "audio" ? ".m4a" : ".mp4";
+            titled = Core.Files.FileNaming.Sanitize(title.Trim() + ext);
+        }
+        var category = Categories.For(titled ?? name);
+        return new DownloadPlan(url, name, titled, Categories.FolderFor(settings, category), category);
     }
 
     /// <summary>A web or FTP address in copied text, or null.</summary>

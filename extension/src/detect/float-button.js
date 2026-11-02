@@ -72,6 +72,13 @@
             }, opts.resetMs == null ? 3000 : opts.resetMs);
           });
       });
+      // Sinks while pressed and springs back, so the click is felt even before BDM answers.
+      button.style.transition = 'transform .28s cubic-bezier(.34, 1.8, .64, 1), background .2s';
+      var sink = function () { if (!busy) { button.style.transitionDuration = '.07s, .2s'; button.style.transform = 'scale(.92)'; } };
+      var lift = function () { button.style.transitionDuration = '.28s, .2s'; button.style.transform = ''; };
+      button.addEventListener('pointerdown', sink);
+      button.addEventListener('pointerup', lift);
+      button.addEventListener('pointerleave', lift);
       root.appendChild(button);
       (doc.body || doc.documentElement).appendChild(host);
       place();

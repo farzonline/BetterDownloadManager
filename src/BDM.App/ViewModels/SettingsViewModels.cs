@@ -34,6 +34,7 @@ public sealed class OptionsViewModel : ObservableObject
         PasteLinkOnAdd = s.PasteLinkOnAdd;
         ShowDownloadDialog = s.ShowDownloadDialog;
         ShowProgressWindow = s.ShowProgressWindow;
+        ShowCompleteDialog = s.ShowCompleteDialog;
         StartWithWindows = s.StartWithWindows;
         EnableLocalApi = s.EnableLocalApi;
         GlobalProxyId = s.GlobalProxyId;
@@ -54,6 +55,7 @@ public sealed class OptionsViewModel : ObservableObject
     public bool PasteLinkOnAdd { get; set; }
     public bool ShowDownloadDialog { get; set; }
     public bool ShowProgressWindow { get; set; }
+    public bool ShowCompleteDialog { get; set; }
     public bool StartWithWindows { get; set; }
     public bool EnableLocalApi { get; set; }
     public string? GlobalProxyId { get; set; }
@@ -79,6 +81,7 @@ public sealed class OptionsViewModel : ObservableObject
         _settings.PasteLinkOnAdd = PasteLinkOnAdd;
         _settings.ShowDownloadDialog = ShowDownloadDialog;
         _settings.ShowProgressWindow = ShowProgressWindow;
+        _settings.ShowCompleteDialog = ShowCompleteDialog;
         _settings.StartWithWindows = StartWithWindows;
         _settings.EnableLocalApi = EnableLocalApi;
         _settings.GlobalProxyId = string.IsNullOrWhiteSpace(GlobalProxyId) ? null : GlobalProxyId;

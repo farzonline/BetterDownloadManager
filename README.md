@@ -11,7 +11,8 @@ open-source behavior; no code from any commercial product.
 - **Queues and schedule**: several queues with their own limits and time windows (overnight works), and an action
   when a queue finishes (sleep, hibernate, shut down).
 - **Everything IDM-style**: menu bar, big toolbar, category tree and sortable columns; a *download file info* dialog
-  before each download (category, save as, description, start now or later) and a progress window per download;
+  before each download (category, save as, description, start now or later; a video is named after its page), a
+  progress window per download (a row per connection with its speed, "To tray") and a *download complete* window;
   copied links open that dialog and *Add URL* fills in a copied link (both can be switched off); batch downloads
   (`photo[001-120].jpg`), site grabber, site logins, FTP/FTPS, proxies, drag-and-drop target, tray icon, history
   search, settings export/import.

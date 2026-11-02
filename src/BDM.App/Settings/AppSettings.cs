@@ -25,6 +25,8 @@ public class AppSettings
     public bool ShowDownloadDialog { get; set; } = true;
     /// <summary>Open a progress window for each download started from the download dialog.</summary>
     public bool ShowProgressWindow { get; set; } = true;
+    /// <summary>When a download with its own progress window finishes, show IDM's "Download complete" window.</summary>
+    public bool ShowCompleteDialog { get; set; } = true;
     public bool StartWithWindows { get; set; }
     /// <summary>Lets the `bdm` command-line tool and scripts control the app through a token-protected loopback API (needs a restart).</summary>
     public bool EnableLocalApi { get; set; } = true;

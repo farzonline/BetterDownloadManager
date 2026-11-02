@@ -126,3 +126,13 @@ test('the button sits in a closed shadow root the page cannot reach into', async
   assert.equal(host.shadowRoot, null);
   assert.equal(host.children.length, 0); // nothing the page could query or click directly
 });
+
+test('the button sinks while pressed and springs back on release, so the click is felt', async () => {
+  const s = setup();
+  await s.doc.fire('play', trusted({ target: s.video }));
+  const [btn] = buttons(s.doc);
+  btn.listeners.pointerdown[0]({});
+  assert.equal(btn.style.transform, 'scale(.92)');
+  btn.listeners.pointerup[0]({});
+  assert.equal(btn.style.transform, '');
+});

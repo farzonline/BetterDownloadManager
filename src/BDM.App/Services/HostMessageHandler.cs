@@ -50,7 +50,7 @@ public sealed class HostMessageHandler(DownloadManager manager, AppSettings sett
     async Task<HostReply> AddAsync(HostMessage msg)
     {
         if (!Uri.TryCreate(msg.Url, UriKind.Absolute, out var url) || !IsDownloadable(url)) return Fail("That is not a downloadable address.");
-        var plan = DownloadPlan.Propose(url, settings);
+        var plan = DownloadPlan.Propose(url, settings, msg.Title, msg.Kind);
         var headers = (msg.Headers ?? new()).Where(h => !h.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase) && !h.Key.Equals("Cookie", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(h => h.Key, h => h.Value);
         var referer = msg.Headers?.FirstOrDefault(h => h.Key.Equals("Referer", StringComparison.OrdinalIgnoreCase)).Value ?? msg.PageUrl;

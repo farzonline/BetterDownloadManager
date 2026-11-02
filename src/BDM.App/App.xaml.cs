@@ -44,6 +44,7 @@ public partial class App : Application
 
         var settings = AppSettings.Load();
         ThemeManager.Initialize(settings.ThemeMode);
+        PressFeedback.Register();
 
         Directory.CreateDirectory(AppSettings.DataDir);
         Log.Configure(Path.Combine(AppSettings.DataDir, "logs"));

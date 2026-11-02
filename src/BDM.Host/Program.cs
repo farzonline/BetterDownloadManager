@@ -18,4 +18,11 @@ if (args.Length >= 1 && args[0] == "--unregister")
 var dir = AppContext.BaseDirectory;
 var appExe = Environment.GetEnvironmentVariable("BDM_APP_EXE") ?? Path.Combine(dir, "BDM.App.exe");
 var link = new PipeAppLink(PipeProtocol.PipeName, appExe, TimeSpan.FromSeconds(15));
+// The browser (in front, the owner just clicked) started this host, so it may hand the focus on: the app's download
+// dialog then comes to the front instead of waiting behind the browser.
+if (OperatingSystem.IsWindows()) AllowSetForegroundWindow(-1); // ASFW_ANY
+
 await new HostRunner(link).RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(), default);
+
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+static extern bool AllowSetForegroundWindow(int processId);

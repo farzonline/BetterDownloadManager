@@ -55,6 +55,7 @@ public partial class AddUrlDialog : Window
         {
             CategoryBox.SelectedItem = proposal.Category;
             SetPath(proposal.Folder, proposal.FileName ?? proposal.SuggestedName);
+            _nameEdited = proposal.FileName != null; // a video named after its page keeps that name when the server suggests another
             DescriptionBox.Text = proposal.Description ?? "";
         }
         UrlBox.SelectAll();

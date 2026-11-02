@@ -76,12 +76,22 @@ public partial class MainWindow : Window
     public void ShowProgress(Guid id, bool always = false)
     {
         if (!always && !_settings.ShowProgressWindow) return;
-        if (_progress.TryGetValue(id, out var open)) { open.Activate(); return; }
-        if (_manager.Get(id) == null) return;
+        if (_progress.TryGetValue(id, out var open)) { open.BringBack(); return; }
+        if (_manager.Get(id) is not { } rec) return;
+        if (rec.State == DownloadState.Completed) { ShowComplete(rec, null); return; }
         var w = new ProgressDialog(_manager, id);
         _progress[id] = w;
         w.Closed += (_, _) => _progress.Remove(id);
         w.Show();
+    }
+
+    /// <summary>IDM's "Download complete" window, where the progress window was (or centred, in front).</summary>
+    void ShowComplete(DownloadRecord rec, Point? at)
+    {
+        var d = new CompleteDialog(rec, _settings);
+        DialogPlacement.Place(d);
+        if (at is { } p) { d.WindowStartupLocation = WindowStartupLocation.Manual; d.Left = p.X; d.Top = p.Y; }
+        d.Show();
     }
 
     void ConfirmRemove()
@@ -127,7 +137,15 @@ public partial class MainWindow : Window
         if (r.State != DownloadState.Completed || was == DownloadState.Completed) return;
         var name = r.FilePath != null ? Path.GetFileName(r.FilePath) : Categories.NameFromUrl(r.Request.Url);
         DownloadCompleted?.Invoke(name);
-        if (!IsVisible || _progress.ContainsKey(r.Id)) return; // its own window already says so
+        if (_progress.Remove(r.Id, out var watching))
+        {
+            // The progress window gives way to "Download complete", in the same place (it may be hidden in the tray).
+            Point? at = watching.IsVisible && watching.WindowState == WindowState.Normal ? new Point(watching.Left, watching.Top) : null;
+            watching.Close();
+            if (_settings.ShowCompleteDialog) ShowComplete(r, at);
+            return;
+        }
+        if (!IsVisible) return; // the tray says so
         var path = r.FilePath;
         ShowBanner($"{name} is complete", false,
             ("Open", () => { if (path != null) new ExplorerShell().Open(path); }),
@@ -201,7 +219,18 @@ public partial class MainWindow : Window
             ? ListSortDirection.Descending : ListSortDirection.Ascending;
         view.SortDescriptions.Clear();
         view.SortDescriptions.Add(new SortDescription(key, dir));
+        foreach (var c in ((GridView)List.View).Columns)
+        {
+            if (c.Header is not GridViewColumnHeader { Content: string text } h) continue;
+            var sorted = ReferenceEquals(h, e.OriginalSource);
+            h.Content = SortLabel(text, sorted ? dir : null);
+            if (sorted) h.SetResourceReference(ForegroundProperty, "Brush.AccentText"); else h.ClearValue(ForegroundProperty);
+        }
     }
+
+    /// <summary>A column header with ▲/▼ when the list is sorted by it, plain otherwise.</summary>
+    public static string SortLabel(string header, ListSortDirection? dir) =>
+        header.TrimEnd(' ', '▲', '▼') + dir switch { ListSortDirection.Ascending => "  ▲", ListSortDirection.Descending => "  ▼", _ => "" };
 
     void CopyAddress_Click(object sender, RoutedEventArgs e)
     {

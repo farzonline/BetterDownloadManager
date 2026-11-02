@@ -96,6 +96,37 @@ public class DownloadPlanTests
     }
 
     [Fact]
+    public async Task AVideoFromThePage_IsNamedAfterThePageTitle_KeepingItsFileType()
+    {
+        // IDM names a caught video after the page, not the CDN's number ("1736412345.mp4").
+        var (m, s) = Engine();
+        var prompt = new Prompt(p => p);
+        var h = new HostMessageHandler(m, s, new NoPicker(), prompt);
+        Assert.True((await h.HandleAsync(File("https://cdn.example/v/1736412345.mp4?sign=1") with { Title = "My Holiday: Part 1", Kind = "video" })).Ok);
+        Assert.Equal("My Holiday_ Part 1.mp4", prompt.Proposed!.FileName);
+        Assert.Equal("Video", prompt.Proposed.Category);
+        Assert.Equal("My Holiday_ Part 1.mp4", Assert.Single(m.All()).Request.FileName);
+    }
+
+    [Theory]
+    [InlineData("https://cdn.example/play?id=7", "video", "Clip.mp4")] // no file type in the address
+    [InlineData("https://cdn.example/a/stream.php", "audio", "Clip.m4a")] // not a media file type
+    [InlineData("https://cdn.example/a/9.webm", "video", "Clip.webm")]
+    public void Propose_ATitledVideo_GetsAMediaFileType(string url, string kind, string expected) =>
+        Assert.Equal(expected, DownloadPlan.Propose(new Uri(url), Engine().S, "Clip", kind).FileName);
+
+    [Fact]
+    public async Task AFileLink_KeepsItsOwnName_EvenThoughThePageHasATitle()
+    {
+        var (m, s) = Engine();
+        var prompt = new Prompt(p => p);
+        var h = new HostMessageHandler(m, s, new NoPicker(), prompt);
+        Assert.True((await h.HandleAsync(File("https://cdn.example/setup.exe") with { Kind = "file" })).Ok);
+        Assert.Null(prompt.Proposed!.FileName);
+        Assert.Equal("setup.exe", prompt.Proposed.SuggestedName);
+    }
+
+    [Fact]
     public async Task BrowserDownload_CancelledInTheDialog_AddsNothing_ButStillAnswersOk()
     {
         // Ok, so the extension cancels the browser's own copy too: Cancel means "don't download this".
