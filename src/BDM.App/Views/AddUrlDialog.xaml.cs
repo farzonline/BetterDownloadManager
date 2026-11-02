@@ -41,6 +41,9 @@ public partial class AddUrlDialog : Window
         ProxyBox.ItemsSource = proxies;
         ProxyBox.SelectedIndex = 0;
         CategoryBox.ItemsSource = Categories.Types;
+        ConnectionChoices[0] = $"Default ({settings.Connections})";
+        ConnectionsBox.ItemsSource = ConnectionChoices;
+        ConnectionsBox.SelectedIndex = 0;
         _debounce.Tick += async (_, _) => { _debounce.Stop(); await ProbeAsync(); };
 
         if (template != null)
@@ -57,6 +60,7 @@ public partial class AddUrlDialog : Window
             SetPath(proposal.Folder, proposal.FileName ?? proposal.SuggestedName);
             _nameEdited = proposal.FileName != null; // a video named after its page keeps that name when the server suggests another
             DescriptionBox.Text = proposal.Description ?? "";
+            if (proposal.Connections is { } n && ConnectionChoices.IndexOf(n.ToString()) is > 0 and var i) ConnectionsBox.SelectedIndex = i;
         }
         UrlBox.SelectAll();
         Loaded += (_, _) => { if (template != null) DescriptionBox.Focus(); else UrlBox.Focus(); };
@@ -67,6 +71,10 @@ public partial class AddUrlDialog : Window
         try { return Clipboard.ContainsText() ? DownloadPlan.LinkFrom(Clipboard.GetText()) : null; }
         catch (System.Runtime.InteropServices.ExternalException) { return null; } // another app holds the clipboard
     }
+
+    // First entry: the queue's own setting (the constructor adds its number to the label).
+    readonly List<string> ConnectionChoices = ["Default", "1", "2", "4", "8", "16", "24", "32"];
+    int? Connections => ConnectionsBox.SelectedIndex > 0 ? int.Parse((string)ConnectionsBox.SelectedItem) : null;
 
     bool Valid(out Uri? uri) => (uri = DownloadPlan.LinkFrom(Url)) != null;
 
@@ -126,7 +134,7 @@ public partial class AddUrlDialog : Window
     {
         // yt-dlp names the file from the page and files it under Video; the other fields don't apply.
         var file = PageBox.IsChecked != true;
-        CategoryBox.IsEnabled = PathBox.IsEnabled = RememberBox.IsEnabled = DescriptionBox.IsEnabled = file;
+        CategoryBox.IsEnabled = PathBox.IsEnabled = RememberBox.IsEnabled = DescriptionBox.IsEnabled = ConnectionsBox.IsEnabled = file;
     }
 
     void Browse_Click(object sender, RoutedEventArgs e)
@@ -184,7 +192,7 @@ public partial class AddUrlDialog : Window
             try { _settings.Save(); } catch (IOException) { /* still remembered for this session */ }
         }
         Plan = new DownloadPlan(uri!, _autoName, name == _autoName ? null : name, folder, Category,
-            DescriptionBox.Text, startNow, ProxyBox.SelectedValue as string);
+            DescriptionBox.Text, startNow, ProxyBox.SelectedValue as string, Connections);
         DialogResult = true;
     }
 }

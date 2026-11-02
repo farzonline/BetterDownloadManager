@@ -47,6 +47,32 @@ public class DownloadManagerTests
     }
 
     [Fact]
+    public async Task ADownload_UsesTheConnectionsChosenForIt_NotTheQueuesDefault()
+    {
+        await using var s = TestServer.Start(400_000);
+        s.SlowFromOffset = 0;
+        var (m, _, dir) = Make(connections: 4);
+        var id = m.Add(Req(s, dir) with { Connections = 1 });
+        await WaitFor(m, id, r => r.State == DownloadState.Completed);
+        Assert.Equal(1, s.PeakConnections);
+        Assert.Equal(1, m.Get(id)!.Request.Connections); // remembered for a resume after a restart
+    }
+
+    [Fact]
+    public async Task ADownloadsOwnSpeedLimit_SlowsIt_AndCanBeLiftedWhileItRuns()
+    {
+        await using var s = TestServer.Start(1_000_000);
+        var (m, _, dir) = Make(connections: 2);
+        m.GlobalLimiter = new SpeedLimiter(0); // an unlimited global budget must not switch the download's own limit off
+        var id = m.Add(Req(s, dir) with { SpeedLimitBytesPerSec = 100_000 }); // 10 s at this speed
+        await Task.Delay(1000);
+        Assert.InRange(m.Get(id)!.Downloaded, 1, 300_000);
+        m.SetSpeedLimit(id, null);
+        await WaitFor(m, id, r => r.State == DownloadState.Completed, seconds: 4);
+        Assert.Null(m.Get(id)!.Request.SpeedLimitBytesPerSec);
+    }
+
+    [Fact]
     public async Task Manager_PauseThenResume_Completes()
     {
         await using var s = TestServer.Start(600_000);

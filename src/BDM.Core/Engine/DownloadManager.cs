@@ -19,6 +19,7 @@ public class DownloadManager
     readonly Dictionary<Guid, CancellationTokenSource> _running = new();
     readonly Dictionary<Guid, DateTime> _lastPersist = new();
     readonly Dictionary<Guid, IReadOnlyList<Segment>> _segments = new();
+    readonly Dictionary<Guid, SpeedLimiter> _ownLimits = new();
 
     readonly HashSet<Guid> _windowStopped = new();
     readonly HashSet<string> _batchDone = new();
@@ -204,6 +205,14 @@ public class DownloadManager
         }
         Update(id, r => r with { State = DownloadState.Paused }, persist: true);
         cts?.Cancel();
+    }
+
+    /// <summary>Sets (null = removes) a download's own speed limit; a running download slows down or speeds up at once.</summary>
+    public void SetSpeedLimit(Guid id, long? bytesPerSec)
+    {
+        var limit = bytesPerSec is > 0 ? bytesPerSec : null;
+        Update(id, r => r with { Request = r.Request with { SpeedLimitBytesPerSec = limit } }, persist: true);
+        lock (_gate) if (_ownLimits.TryGetValue(id, out var running)) running.SetLimit(limit ?? 0);
     }
 
     public void Resume(Guid id)
@@ -413,8 +422,10 @@ public class DownloadManager
             {
                 var probe = await Prober.ProbeAsync(http, req, ct);
                 Update(id, r => r with { Total = probe.Length, FilePath = Path.Combine(r.Request.DestinationDir, probe.FileName) }, persist: true);
-                var opts = BaseOptions with { Connections = q.Connections };
-                result = await new SegmentedDownloader(http, GlobalLimiter).RunAsync(req, probe, opts, progress, ct, PartKey(id));
+                var opts = BaseOptions with { Connections = req.Connections ?? q.Connections };
+                var own = new SpeedLimiter(req.SpeedLimitBytesPerSec ?? 0);
+                lock (_gate) _ownLimits[id] = own;
+                result = await new SegmentedDownloader(http, GlobalLimiter, own).RunAsync(req, probe, opts, progress, ct, PartKey(id));
             }
 
             if (rec.ExpectedSha256 is { } want &&
@@ -442,7 +453,7 @@ public class DownloadManager
         catch (Exception e) { Fail(id, DownloadFailure.Other, e); }
         finally
         {
-            lock (_gate) { _running.Remove(id); _segments.Remove(id); }
+            lock (_gate) { _running.Remove(id); _segments.Remove(id); _ownLimits.Remove(id); }
             Pump(q.Id);
             CheckQueueFinished(q);
         }

@@ -48,6 +48,33 @@ public class SegmentedDownloaderTests
     }
 
     [Fact]
+    public async Task AServerThatAllowsOneConnection_StillDownloads_OnTheConnectionItAccepts()
+    {
+        // Hotlink: one connection per visitor, every extra one answers 503. IDM carries on with the one that works.
+        await using var s = TestServer.Start(400_000);
+        s.MaxConnections = 1;
+        s.SlowFromOffset = 0; // keep that one connection busy while the others are refused
+        s.SlowDelayMs = 5;
+        var dir = NewDir();
+        var (req, probe) = await Prep(s, dir);
+        var r = await new SegmentedDownloader(new HttpClient()).RunAsync(req, probe,
+            new DownloadOptions(Connections: 8, MaxRetries: 2, RetryBaseDelay: TimeSpan.FromMilliseconds(10)), null, default);
+        Assert.Equal(s.Body, await File.ReadAllBytesAsync(r.Path));
+        Assert.True(s.Refused > 0, "the server should have refused the extra connections");
+    }
+
+    [Fact]
+    public async Task AServerRefusingEveryConnection_StillFails_AfterItsRetries()
+    {
+        await using var s = TestServer.Start(100_000);
+        var (req, probe) = await Prep(s, NewDir());
+        s.MaxConnections = 0;
+        var e = await Assert.ThrowsAsync<DownloadException>(() => new SegmentedDownloader(new HttpClient()).RunAsync(req, probe,
+            new DownloadOptions(Connections: 4, MaxRetries: 2, RetryBaseDelay: TimeSpan.FromMilliseconds(5)), null, default));
+        Assert.Contains("503", e.Message);
+    }
+
+    [Fact]
     public async Task Resume_AfterCancel_ContinuesAndIsByteIdentical()
     {
         await using var s = TestServer.Start(1_500_000);

@@ -13,6 +13,12 @@ public record DownloadRequest(
     /// <summary>The owner's own note, shown in the list.</summary>
     public string? Description { get; init; }
 
+    /// <summary>Connections for this download (chosen in the download dialog); null = the queue's setting.</summary>
+    public int? Connections { get; init; }
+
+    /// <summary>This download's own speed limit (IDM's per-download speed limiter); null = no limit of its own.</summary>
+    public long? SpeedLimitBytesPerSec { get; init; }
+
     /// <summary>Builds a request message carrying this download's Referer, Cookie and custom headers.</summary>
     public HttpRequestMessage CreateMessage(HttpMethod method)
     {

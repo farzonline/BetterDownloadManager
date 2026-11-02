@@ -96,6 +96,16 @@ public class DownloadPlanTests
     }
 
     [Fact]
+    public async Task TheConnectionsChosenInTheDialog_GoWithTheDownload()
+    {
+        var (m, s) = Engine();
+        var h = new HostMessageHandler(m, s, new NoPicker(), new Prompt(p => p with { Connections = 1 }));
+        Assert.True((await h.HandleAsync(File("https://fs45.hotlink.example/x/movie.mp4"))).Ok);
+        Assert.Equal(1, Assert.Single(m.All()).Request.Connections);
+        Assert.Null(DownloadPlan.Propose(new Uri("https://x.example/a.zip"), s).Connections); // the queue's setting unless chosen
+    }
+
+    [Fact]
     public async Task AVideoFromThePage_IsNamedAfterThePageTitle_KeepingItsFileType()
     {
         // IDM names a caught video after the page, not the CDN's number ("1736412345.mp4").

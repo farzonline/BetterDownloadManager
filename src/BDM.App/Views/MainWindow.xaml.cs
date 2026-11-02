@@ -79,10 +79,18 @@ public partial class MainWindow : Window
         if (_progress.TryGetValue(id, out var open)) { open.BringBack(); return; }
         if (_manager.Get(id) is not { } rec) return;
         if (rec.State == DownloadState.Completed) { ShowComplete(rec, null); return; }
-        var w = new ProgressDialog(_manager, id);
+        var w = new ProgressDialog(_manager, id, _settings.ShowCompleteDialog);
         _progress[id] = w;
         w.Closed += (_, _) => _progress.Remove(id);
         w.Show();
+    }
+
+    /// <summary>The per-download "when it finishes" choice from the progress window.</summary>
+    void RunWhenDone(WhenDone then)
+    {
+        if (then == WhenDone.ExitApp) { ((App)Application.Current).ExitApp(); return; }
+        var action = then switch { WhenDone.Sleep => PostAction.Sleep, WhenDone.Hibernate => PostAction.Hibernate, WhenDone.Shutdown => PostAction.Shutdown, _ => PostAction.None };
+        if (action != PostAction.None) PostActions.Run(action, null, null, _manager.PowerApi);
     }
 
     /// <summary>IDM's "Download complete" window, where the progress window was (or centred, in front).</summary>
@@ -141,8 +149,10 @@ public partial class MainWindow : Window
         {
             // The progress window gives way to "Download complete", in the same place (it may be hidden in the tray).
             Point? at = watching.IsVisible && watching.WindowState == WindowState.Normal ? new Point(watching.Left, watching.Top) : null;
+            var (show, then) = (watching.ShowCompleteWindow, watching.WhenDone);
             watching.Close();
-            if (_settings.ShowCompleteDialog) ShowComplete(r, at);
+            if (show) ShowComplete(r, at);
+            RunWhenDone(then);
             return;
         }
         if (!IsVisible) return; // the tray says so

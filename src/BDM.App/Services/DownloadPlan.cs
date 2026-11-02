@@ -4,9 +4,10 @@ using BDM.Core.Http;
 namespace BDM.App.Services;
 
 /// <summary>What the "download file info" step settles before a download starts (IDM shows the same dialog).</summary>
+/// <param name="Connections">Connections for this download; null = the queue's setting.</param>
 /// <param name="FileName">The owner's own name; null = automatic (the server's name, else <paramref name="SuggestedName"/>).</param>
 public sealed record DownloadPlan(Uri Url, string SuggestedName, string? FileName, string Folder, string Category,
-    string? Description = null, bool StartNow = true, string? ProxyProfileId = null)
+    string? Description = null, bool StartNow = true, string? ProxyProfileId = null, int? Connections = null)
 {
     /// <param name="title">The page's title; a video or audio caught on a page is named after it, as IDM does (CDN names are often just numbers).</param>
     /// <param name="kind">What the extension found: "video", "audio" or "file".</param>
@@ -36,6 +37,7 @@ public sealed record DownloadPlan(Uri Url, string SuggestedName, string? FileNam
         Category = Category,
         Description = string.IsNullOrWhiteSpace(Description) ? null : Description.Trim(),
         ProxyProfileId = string.IsNullOrWhiteSpace(ProxyProfileId) ? template.ProxyProfileId : ProxyProfileId,
+        Connections = Connections ?? template.Connections,
     };
 }
 

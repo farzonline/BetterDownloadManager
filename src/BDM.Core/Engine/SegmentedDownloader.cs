@@ -8,12 +8,17 @@ using Microsoft.Win32.SafeHandles;
 
 namespace BDM.Core.Engine;
 
-public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter = null)
+/// <param name="limiter">The budget shared by every download (the global limit).</param>
+/// <param name="own">This download's own limit, applied on top of the shared one.</param>
+public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter = null, SpeedLimiter? own = null)
 {
     static readonly TimeSpan Stall = TimeSpan.FromSeconds(30);
 
     /// <summary>The server did not honor a Range request (200, or a different range): fall back to a clean full download.</summary>
     sealed class RangeIgnoredException : Exception;
+
+    /// <summary>The server refused one more connection (503/429) while another is receiving: this one steps aside.</summary>
+    sealed class ServerFullException : Exception;
 
     /// <param name="partKey">Makes the .bdmpart name unique per download, so same-named downloads in one folder never share partial data.</param>
     public async Task<DownloadResult> RunAsync(DownloadRequest req, FileProbe probe, DownloadOptions opts,
@@ -60,6 +65,7 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
             using var stopReporter = new CancellationTokenSource();
             var claimed = new HashSet<Segment>();
             var claimLock = new object();
+            var receiving = new System.Runtime.CompilerServices.StrongBox<int>();
             Exception? fault = null;
 
             Segment? Claim()
@@ -78,7 +84,15 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
                 try
                 {
                     while (!work.IsCancellationRequested && Claim() is { } seg)
-                        await RunSegmentAsync(req, probe, opts, seg, handle, lim, work.Token);
+                    {
+                        try { await RunSegmentAsync(req, probe, opts, seg, handle, lim, receiving, work.Token); }
+                        catch (ServerFullException)
+                        {
+                            // Free hosts (Hotlink) allow one connection: hand the part back for a working connection to take later.
+                            lock (claimLock) claimed.Remove(seg);
+                            return;
+                        }
+                    }
                 }
                 catch (Exception e) when (e is not OperationCanceledException || !work.IsCancellationRequested)
                 {
@@ -149,7 +163,7 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
     }
 
     async Task RunSegmentAsync(DownloadRequest req, FileProbe probe, DownloadOptions opts, Segment seg,
-        SafeFileHandle handle, SpeedLimiter? lim, CancellationToken ct)
+        SafeFileHandle handle, SpeedLimiter? lim, System.Runtime.CompilerServices.StrongBox<int> receiving, CancellationToken ct)
     {
         var attempt = 0;
         var baseDelay = opts.RetryBaseDelay ?? TimeSpan.FromMilliseconds(500);
@@ -158,7 +172,12 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
             var before = Interlocked.Read(ref seg.Downloaded);
             try
             {
-                await FetchAsync(req, probe, seg, handle, lim, ct);
+                await FetchAsync(req, probe, seg, handle, lim, receiving, ct);
+            }
+            catch (HttpRequestException e) when (e.StatusCode is HttpStatusCode.ServiceUnavailable or HttpStatusCode.TooManyRequests
+                                                 && Volatile.Read(ref receiving.Value) > 0 && !ct.IsCancellationRequested)
+            {
+                throw new ServerFullException();
             }
             catch (Exception e) when ((e is HttpRequestException or IOException or OperationCanceledException) && !ct.IsCancellationRequested)
             {
@@ -169,7 +188,8 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
         }
     }
 
-    async Task FetchAsync(DownloadRequest req, FileProbe probe, Segment seg, SafeFileHandle handle, SpeedLimiter? lim, CancellationToken ct)
+    async Task FetchAsync(DownloadRequest req, FileProbe probe, Segment seg, SafeFileHandle handle, SpeedLimiter? lim,
+        System.Runtime.CompilerServices.StrongBox<int> receiving, CancellationToken ct)
     {
         var from = seg.Start + Interlocked.Read(ref seg.Downloaded);
         using var msg = req.CreateMessage(HttpMethod.Get);
@@ -183,6 +203,7 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
         await using var stream = await resp.Content.ReadAsStreamAsync(ct);
         var buf = ArrayPool<byte>.Shared.Rent(64 * 1024);
         using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        Interlocked.Increment(ref receiving.Value);
         try
         {
             while (true)
@@ -193,12 +214,13 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
                 var n = await stream.ReadAsync(buf.AsMemory(0, (int)Math.Min(buf.Length, remaining)), stall.Token);
                 if (n == 0) throw new IOException("Connection closed before the segment was complete.");
                 if (lim != null) await lim.AcquireAsync(n, ct);
+                if (own != null) await own.AcquireAsync(n, ct);
                 try { await RandomAccess.WriteAsync(handle, buf.AsMemory(0, n), seg.Start + Interlocked.Read(ref seg.Downloaded), ct); }
                 catch (IOException e) { throw DownloadException.FromIo(e); }
                 Interlocked.Add(ref seg.Downloaded, n);
             }
         }
-        finally { ArrayPool<byte>.Shared.Return(buf); }
+        finally { Interlocked.Decrement(ref receiving.Value); ArrayPool<byte>.Shared.Return(buf); }
     }
 
     static void CheckStatus(HttpResponseMessage resp)
@@ -238,6 +260,7 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
                     while ((n = await stream.ReadAsync(buf, ct)) > 0)
                     {
                         if (lim != null) await lim.AcquireAsync(n, ct);
+                        if (own != null) await own.AcquireAsync(n, ct);
                         await fs.WriteAsync(buf.AsMemory(0, n), ct);
                         done += n;
                         window += n;

@@ -257,6 +257,24 @@ public class MainViewModelTests
     public void Format_Eta(int seconds, string expected) => Assert.Equal(expected, Format.Eta(TimeSpan.FromSeconds(seconds)));
 
     [Fact]
+    public void ItemViewModel_AStalledBigDownload_SaysItIsWaiting_InsteadOfCrashingTheApp()
+    {
+        // Hotlink, 3.2 GB: 4 MB arrived, then nothing. The speed used to shrink towards zero without reaching it,
+        // until "time left" overflowed TimeSpan and the exception closed BDM.
+        var req = new DownloadRequest(new Uri("https://fs45.hotlink.cc/x/Yume125.mp4"), null, null, new Dictionary<string, string>(), null, null, "Video", ".");
+        var rec = new DownloadRecord(Guid.NewGuid(), req, DownloadState.Running, 0, 3_158_880_704, null, "main", DateTime.UtcNow);
+        var t = DateTimeOffset.Parse("2026-11-02T06:00:00Z");
+        var item = new DownloadItemViewModel(rec, t);
+        item.Update(rec with { Downloaded = 4_319_595 }, t = t.AddSeconds(1));
+        for (var i = 0; i < 2000; i++) item.Update(rec with { Downloaded = 4_319_595 }, t = t.AddSeconds(0.25));
+        Assert.Equal("", item.SpeedText);
+        Assert.Equal("", item.EtaText);
+    }
+
+    [Fact]
+    public void Format_Eta_BeyondAnyUsefulTime_IsLeftBlank() => Assert.Equal("", Format.Eta(1e15));
+
+    [Fact]
     public void ItemViewModel_ComputesSpeedEtaAndProgressFromSamples()
     {
         var req = new DownloadRequest(new Uri("https://x/big.zip"), null, null, new Dictionary<string, string>(), null, null, "Compressed", ".");

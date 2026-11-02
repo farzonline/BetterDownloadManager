@@ -26,7 +26,8 @@
       </StackPanel>
 
       <TextBlock Grid.Row="3" Text="Category" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
-      <ComboBox x:Name="CategoryBox" Grid.Row="3" Grid.Column="2" HorizontalAlignment="Left" MinWidth="220" SelectionChanged="CategoryBox_SelectionChanged" AutomationProperties.Name="Category">
+      <StackPanel Grid.Row="3" Grid.Column="2" Orientation="Horizontal">
+      <ComboBox x:Name="CategoryBox" MinWidth="220" SelectionChanged="CategoryBox_SelectionChanged" AutomationProperties.Name="Category">
         <ComboBox.ItemTemplate>
           <DataTemplate>
             <StackPanel Orientation="Horizontal">
@@ -37,6 +38,10 @@
           </DataTemplate>
         </ComboBox.ItemTemplate>
       </ComboBox>
+      <TextBlock Text="Connections" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" Margin="20,0,10,0"/>
+      <ComboBox x:Name="ConnectionsBox" MinWidth="120" AutomationProperties.Name="Connections"
+                ToolTip="How many parts to fetch at once. Some free file hosts (Hotlink) allow only 1; BDM drops the ones a server refuses anyway."/>
+      </StackPanel>
 
       <TextBlock Grid.Row="5" Text="Save as" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"/>
       <Grid Grid.Row="5" Grid.Column="2">

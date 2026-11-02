@@ -12,7 +12,9 @@ open-source behavior; no code from any commercial product.
   when a queue finishes (sleep, hibernate, shut down).
 - **Everything IDM-style**: menu bar, big toolbar, category tree and sortable columns; a *download file info* dialog
   before each download (category, save as, description, start now or later; a video is named after its page), a
-  progress window per download (a row per connection with its speed, "To tray") and a *download complete* window;
+  progress window per download (a row per connection with its speed, "To tray", its own speed limiter and what to do
+  when it finishes: exit, sleep, hibernate, shut down) and a *download complete* window; connections can be chosen per
+  download, and a server that allows fewer (free file hosts such as Hotlink allow one) just gets fewer;
   copied links open that dialog and *Add URL* fills in a copied link (both can be switched off); batch downloads
   (`photo[001-120].jpg`), site grabber, site logins, FTP/FTPS, proxies, drag-and-drop target, tray icon, history
   search, settings export/import.

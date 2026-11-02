@@ -12,6 +12,7 @@ public sealed class TestServer : IAsyncDisposable
     readonly WebApplication _app;
     long _bytesServed;
     int _transientFailures;
+    int _openBodies;
     volatile bool _expired;
 
     public byte[] Body { get; set; }
@@ -22,6 +23,11 @@ public sealed class TestServer : IAsyncDisposable
     /// <summary>GETs answer 204 No Content (what Chrome hands back for a request it turned into its own download).</summary>
     public bool NoContentForGets { get; set; }
     public string? ETag { get; set; }
+    /// <summary>Like free file hosts (Hotlink): a GET while this many are already sending gets 503.</summary>
+    public int MaxConnections { get; set; } = int.MaxValue;
+    public int Refused;
+    /// <summary>Most GETs that were sending at the same moment.</summary>
+    public int PeakConnections;
     public string? ContentDisposition { get; set; }
     public string ContentType { get; set; } = "application/octet-stream";
     /// <summary>First N GET requests answer 500.</summary>
@@ -92,15 +98,31 @@ public sealed class TestServer : IAsyncDisposable
         res.ContentLength = len;
         if (isHead) return;
 
-        const int chunk = 8192;
-        for (long pos = start; pos <= end; pos += chunk)
+        var open = Interlocked.Increment(ref _openBodies);
+        int peak;
+        while (open > (peak = PeakConnections) && Interlocked.CompareExchange(ref PeakConnections, open, peak) != peak) { }
+        if (open > MaxConnections)
         {
-            if (ExpireAfterBytes >= 0 && BytesServed >= ExpireAfterBytes) { _expired = true; ctx.Abort(); return; }
-            var n = (int)Math.Min(chunk, end - pos + 1);
-            await res.Body.WriteAsync(body.AsMemory((int)pos, n), ctx.RequestAborted);
-            Interlocked.Add(ref _bytesServed, n);
-            if (start >= SlowFromOffset) await Task.Delay(SlowDelayMs, ctx.RequestAborted);
+            Interlocked.Decrement(ref _openBodies);
+            Interlocked.Increment(ref Refused);
+            res.Headers.Remove("Content-Range");
+            res.ContentLength = 0;
+            res.StatusCode = 503;
+            return;
         }
+        try
+        {
+            const int chunk = 8192;
+            for (long pos = start; pos <= end; pos += chunk)
+            {
+                if (ExpireAfterBytes >= 0 && BytesServed >= ExpireAfterBytes) { _expired = true; ctx.Abort(); return; }
+                var n = (int)Math.Min(chunk, end - pos + 1);
+                await res.Body.WriteAsync(body.AsMemory((int)pos, n), ctx.RequestAborted);
+                Interlocked.Add(ref _bytesServed, n);
+                if (start >= SlowFromOffset) await Task.Delay(SlowDelayMs, ctx.RequestAborted);
+            }
+        }
+        finally { Interlocked.Decrement(ref _openBodies); }
     }
 
     static bool TryParseRange(string header, long total, out long start, out long end)

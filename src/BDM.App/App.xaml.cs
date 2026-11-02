@@ -48,8 +48,13 @@ public partial class App : Application
 
         Directory.CreateDirectory(AppSettings.DataDir);
         Log.Configure(Path.Combine(AppSettings.DataDir, "logs"));
-        // Logged, not handled: the app still crashes as before, but now there is a trace of why.
-        DispatcherUnhandledException += (_, a) => Log.Error("Unhandled UI exception", a.Exception);
+        // A display bug must not take every running download down with it: log it, say so, keep going.
+        DispatcherUnhandledException += (_, a) =>
+        {
+            Log.Error("Unhandled UI exception", a.Exception);
+            a.Handled = true;
+            _window?.ShowBanner($"Something went wrong on screen ({a.Exception.Message}). Your downloads keep running; details are in Help > Open the log folder.", error: true);
+        };
         AppDomain.CurrentDomain.UnhandledException += (_, a) => Log.Error("Unhandled exception", a.ExceptionObject as Exception ?? new Exception(a.ExceptionObject?.ToString()));
         TaskScheduler.UnobservedTaskException += (_, a) => Log.Error("Unobserved task exception", a.Exception);
         _store = new DownloadStore(Path.Combine(AppSettings.DataDir, "bdm.db"));

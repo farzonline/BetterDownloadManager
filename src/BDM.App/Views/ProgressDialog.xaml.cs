@@ -11,6 +11,9 @@ using BDM.Core.Engine;
 
 namespace BDM.App.Views;
 
+/// <summary>IDM's "Options on completion": what happens once this one download is done.</summary>
+public enum WhenDone { Nothing, ExitApp, Sleep, Hibernate, Shutdown }
+
 /// <summary>
 /// One download's own window (IDM opens one per download): live numbers 4 times a second, a row per connection, its own
 /// taskbar button with progress, and "To tray" to tuck it away. Closing it never stops the download; when the download
@@ -27,8 +30,10 @@ public partial class ProgressDialog : Window
     System.Windows.Forms.NotifyIcon? _tray;
 
     public Guid DownloadId => _id;
+    public bool ShowCompleteWindow => ShowCompleteBox.IsChecked == true;
+    public WhenDone WhenDone => (WhenDone)Math.Max(0, WhenDoneBox.SelectedIndex);
 
-    public ProgressDialog(DownloadManager manager, Guid id)
+    public ProgressDialog(DownloadManager manager, Guid id, bool showComplete = true)
     {
         InitializeComponent();
         ThemeManager.Attach(this);
@@ -39,6 +44,13 @@ public partial class ProgressDialog : Window
         _vm = new DownloadItemViewModel(rec, DateTimeOffset.UtcNow);
         DataContext = _vm;
         Parts.ItemsSource = _parts;
+        ShowCompleteBox.IsChecked = showComplete;
+        if (rec.Request.SpeedLimitBytesPerSec is { } limit) { LimitKb.Text = (limit / 1024).ToString(); LimitBox.IsChecked = true; }
+        if (rec.Stream != null || rec.YtDlpFormat != null || rec.Request.Url.Scheme is "ftp" or "ftps")
+        {
+            LimitBox.IsEnabled = LimitKb.IsEnabled = false;
+            LimitNote.Text = "The speed limiter works on file downloads; streams, video pages and FTP don't use it.";
+        }
         _timer.Tick += (_, _) => Refresh();
         Loaded += (_, _) => { Refresh(); _timer.Start(); };
         Closed += (_, _) => { _timer.Stop(); _tray?.Dispose(); };
@@ -127,6 +139,29 @@ public partial class ProgressDialog : Window
         Show();
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
+    }
+
+    void Tab_Checked(object sender, RoutedEventArgs e)
+    {
+        if (StatusPage == null) return; // while the window is still being built
+        StatusPage.Visibility = StatusTab.IsChecked == true ? Visibility.Visible : Visibility.Hidden;
+        SpeedPage.Visibility = SpeedTab.IsChecked == true ? Visibility.Visible : Visibility.Hidden;
+        FinishPage.Visibility = FinishTab.IsChecked == true ? Visibility.Visible : Visibility.Hidden;
+    }
+
+    /// <summary>Applies the speed limiter at once (ticking the box, leaving the number box, or Enter).</summary>
+    void Limit_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        long? limit = LimitBox.IsChecked == true && long.TryParse(LimitKb.Text.Trim(), out var kb) && kb > 0 ? kb * 1024 : null;
+        var on = limit != null;
+        _manager.SetSpeedLimit(_id, limit);
+        if (LimitBox.IsChecked == true && !on) LimitNote.Text = "Enter a speed in KB/s (a whole number above 0) to turn the limiter on.";
+    }
+
+    void LimitKb_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter) { Limit_Changed(sender, e); e.Handled = true; }
     }
 
     void Tray_Click(object sender, RoutedEventArgs e) => ToTray();

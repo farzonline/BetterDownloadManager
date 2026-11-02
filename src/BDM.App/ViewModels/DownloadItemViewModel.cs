@@ -73,6 +73,7 @@ public sealed class DownloadItemViewModel : ObservableObject
             {
                 var instant = Math.Max(0, (r.Downloaded - _sampleBytes) / dt);
                 _speed = _speed > 0 ? 0.7 * _speed + 0.3 * instant : instant;
+                if (_speed < 1) _speed = 0; // nothing is arriving: the average would otherwise shrink forever without reaching 0
                 _sampleTime = now;
                 _sampleBytes = r.Downloaded;
             }
@@ -113,7 +114,7 @@ public sealed class DownloadItemViewModel : ObservableObject
         SizeText = r.Total is > 0 ? Format.Size(r.Total.Value) : r.Downloaded > 0 ? Format.Size(r.Downloaded) : "";
         SpeedText = r.State == DownloadState.Running ? Format.Speed(_speed) : "";
         EtaText = r.State == DownloadState.Running && _speed > 0 && r.Total is > 0
-            ? Format.Eta(TimeSpan.FromSeconds((r.Total.Value - r.Downloaded) / _speed)) : "";
+            ? Format.Eta((r.Total.Value - r.Downloaded) / _speed) : "";
         StatusText = r.State switch
         {
             DownloadState.Queued => "Queued",
