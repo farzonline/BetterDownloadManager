@@ -51,6 +51,18 @@ public class SegmentMapTests
     }
 
     [Fact]
+    public void Sidecar_HeldByAnotherProgram_IsSkippedNotThrown()
+    {
+        // An antivirus or indexer holding the resume file used to fail the download with "Access to the path is denied".
+        var path = Path.Combine(Directory.CreateTempSubdirectory().FullName, "held.bdmpart.json");
+        var map = SegmentMap.Create(1000, 4);
+        SegmentSidecar.Save(path, map, null, null);
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.False(SegmentSidecar.Save(path, map, null, null));
+        Assert.True(SegmentSidecar.Save(path, map, null, null));
+    }
+
+    [Fact]
     public void Sidecar_CorruptFile_ReturnsNull()
     {
         var path = Path.Combine(Directory.CreateTempSubdirectory().FullName, "bad.json");

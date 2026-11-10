@@ -63,6 +63,7 @@ public partial class AddUrlDialog : Window
             if (proposal.Connections is { } n && ConnectionChoices.IndexOf(n.ToString()) is > 0 and var i) ConnectionsBox.SelectedIndex = i;
         }
         UrlBox.SelectAll();
+        ShowDetails(settings.ShowDownloadDetails);
         Loaded += (_, _) => { if (template != null) DescriptionBox.Focus(); else UrlBox.Focus(); };
     }
 
@@ -171,6 +172,24 @@ public partial class AddUrlDialog : Window
         {
             Info.Text = "Couldn't look this address up. You can still add it.";
         }
+    }
+
+    /// <summary>"Hide details" keeps only address, category, connections and where to save. Remembered for next time.</summary>
+    void ShowDetails(bool on)
+    {
+        var v = on ? Visibility.Visible : Visibility.Collapsed;
+        RememberBox.Visibility = DescriptionLabel.Visibility = DescriptionBox.Visibility = ProxyLabel.Visibility = ProxyBox.Visibility = v;
+        PageBox.Visibility = on && _template == null ? Visibility.Visible : Visibility.Collapsed; // a caught file is never a page
+        DetailsButton.Content = on ? "Hide details" : "Show details";
+        Ico.SetGlyph(DetailsButton, on ? "" : "");
+        SizeToContent = SizeToContent.Height;
+    }
+
+    void Details_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ShowDownloadDetails = DescriptionBox.Visibility != Visibility.Visible;
+        try { _settings.Save(); } catch (IOException) { /* still applies to this dialog */ }
+        ShowDetails(_settings.ShowDownloadDetails);
     }
 
     void Now_Click(object sender, RoutedEventArgs e) => Finish(startNow: true);

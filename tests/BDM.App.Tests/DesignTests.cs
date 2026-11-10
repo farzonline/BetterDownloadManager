@@ -51,6 +51,18 @@ public class DesignTests
     }
 
     [Fact]
+    public void EachDownload_ShowsTheIconOfTheAppThatOpensIt_AsInIdm()
+    {
+        var pdf = FileIcons.For("report.pdf");
+        Assert.Equal(16, pdf.PixelWidth);
+        Assert.True(pdf.IsFrozen); // shared across rows and threads
+        Assert.Same(pdf, FileIcons.For("other.PDF")); // one lookup per file type
+        Assert.NotSame(pdf, FileIcons.For("setup.zip"));
+        Assert.Equal(16, FileIcons.For("no-extension").PixelWidth); // Windows' plain file icon
+        Assert.Equal(16, FileIcons.For("x.bdm-unknown-type").PixelWidth);
+    }
+
+    [Fact]
     public void DarkAndLightThemes_DefineExactlyTheSameKeys()
     {
         var dark = Keys("Themes/Nightfall.xaml");

@@ -5,6 +5,7 @@ using System.Windows.Shapes;
 using System.Windows.Shell;
 using System.Windows.Threading;
 using BDM.App.Services;
+using BDM.App.Settings;
 using BDM.App.ViewModels;
 using BDM.Core.Data;
 using BDM.Core.Engine;
@@ -23,6 +24,7 @@ public partial class ProgressDialog : Window
 {
     readonly DownloadManager _manager;
     readonly Guid _id;
+    readonly AppSettings _settings;
     readonly DownloadItemViewModel _vm;
     readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     readonly SegmentRows _rows = new();
@@ -33,18 +35,22 @@ public partial class ProgressDialog : Window
     public bool ShowCompleteWindow => ShowCompleteBox.IsChecked == true;
     public WhenDone WhenDone => (WhenDone)Math.Max(0, WhenDoneBox.SelectedIndex);
 
-    public ProgressDialog(DownloadManager manager, Guid id, bool showComplete = true)
+    public ProgressDialog(DownloadManager manager, Guid id, AppSettings settings)
     {
         InitializeComponent();
         ThemeManager.Attach(this);
         Icon = AppIcon.Image();
         _manager = manager;
         _id = id;
+        _settings = settings;
         var rec = manager.Get(id) ?? throw new InvalidOperationException("That download no longer exists.");
         _vm = new DownloadItemViewModel(rec, DateTimeOffset.UtcNow);
         DataContext = _vm;
         Parts.ItemsSource = _parts;
-        ShowCompleteBox.IsChecked = showComplete;
+        ShowCompleteBox.IsChecked = settings.ShowCompleteDialog;
+        ShowDetails(settings.ShowProgressDetails);
+        // Once the owner drags the window bigger, the connections table takes the extra room.
+        SizeChanged += (_, _) => { if (SizeToContent == SizeToContent.Manual && !double.IsNaN(Parts.Height)) Parts.Height = double.NaN; };
         if (rec.Request.SpeedLimitBytesPerSec is { } limit) { LimitKb.Text = (limit / 1024).ToString(); LimitBox.IsChecked = true; }
         if (rec.Stream != null || rec.YtDlpFormat != null || rec.Request.Url.Scheme is "ftp" or "ftps")
         {
@@ -162,6 +168,23 @@ public partial class ProgressDialog : Window
     void LimitKb_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == System.Windows.Input.Key.Enter) { Limit_Changed(sender, e); e.Handled = true; }
+    }
+
+    /// <summary>IDM's "Hide details": just the bars and the buttons, or everything. Remembered for the next window.</summary>
+    void ShowDetails(bool on)
+    {
+        Details.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        DetailsButton.Content = on ? "Hide details" : "Show details";
+        Ico.SetGlyph(DetailsButton, on ? "" : "");
+        Parts.Height = 150;
+        SizeToContent = SizeToContent.Height; // fit the new content, then the owner may resize again
+    }
+
+    void Details_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.ShowProgressDetails = Details.Visibility != Visibility.Visible;
+        try { _settings.Save(); } catch (IOException) { /* still applies to this window */ }
+        ShowDetails(_settings.ShowProgressDetails);
     }
 
     void Tray_Click(object sender, RoutedEventArgs e) => ToTray();

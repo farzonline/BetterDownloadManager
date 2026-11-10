@@ -52,7 +52,7 @@ test('button is removed on pause and not duplicated on repeated play', async () 
   const s = setup();
   await s.doc.fire('play', trusted({ target: s.video }));
   await s.doc.fire('play', trusted({ target: s.video }));
-  assert.equal(buttons(s.doc).length, 1);
+  assert.equal(buttons(s.doc).length, 2); // the button and its x
   assert.equal(hosts(s.doc).length, 1);
   await s.doc.fire('pause', trusted({ target: s.video }));
   assert.equal(buttons(s.doc).length, 0);
@@ -135,4 +135,25 @@ test('the button sinks while pressed and springs back on release, so the click i
   assert.equal(btn.style.transform, 'scale(.92)');
   btn.listeners.pointerup[0]({});
   assert.equal(btn.style.transform, '');
+});
+
+test('the close (x) button gets rid of the button for that video, even when it plays again', async () => {
+  const s = setup();
+  await s.doc.fire('play', trusted({ target: s.video }));
+  const [, close] = buttons(s.doc);
+  assert.equal(close.title, 'Hide this button');
+  assert.equal(close.style.position, 'fixed');
+  close.listeners.click[0](click(false)); // a forged click doesn't
+  assert.equal(buttons(s.doc).length, 2);
+  close.listeners.click[0](click(true));
+  assert.equal(hosts(s.doc).length, 0);
+  assert.equal(s.clicks.length, 0); // closing never starts a download
+  await s.doc.fire('pause', trusted({ target: s.video }));
+  await s.doc.fire('play', trusted({ target: s.video }));
+  assert.equal(buttons(s.doc).length, 0);
+
+  const other = new FakeEl('video');
+  s.doc.body.append(other);
+  await s.doc.fire('play', trusted({ target: other }));
+  assert.equal(buttons(s.doc).length, 2); // another video still gets one
 });

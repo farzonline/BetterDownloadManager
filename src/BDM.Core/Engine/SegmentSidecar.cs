@@ -6,13 +6,26 @@ public static class SegmentSidecar
 {
     record Dto(long Length, string? ETag, string? LastModified, List<long[]> Segments);
 
-    public static void Save(string path, SegmentMap map, string? etag, string? lastModified)
+    /// <summary>
+    /// Writes the resume file. Returns false when another program (antivirus, indexer, backup) holds it: the next save,
+    /// a second later, catches up, so this never fails the download.
+    /// </summary>
+    public static bool Save(string path, SegmentMap map, string? etag, string? lastModified)
     {
         var dto = new Dto(map.Length, etag, lastModified,
             map.Snapshot().Select(s => new[] { s.Start, s.End, Math.Min(Interlocked.Read(ref s.Downloaded), s.End - s.Start + 1) }).ToList());
         var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(dto));
-        File.Move(tmp, path, overwrite: true);
+        try
+        {
+            File.WriteAllText(tmp, JsonSerializer.Serialize(dto));
+            File.Move(tmp, path, overwrite: true);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Error("Could not save the resume file (another program has it open); trying again shortly", e);
+            return false;
+        }
     }
 
     public static (SegmentMap Map, string? ETag, string? LastModified)? Load(string path)

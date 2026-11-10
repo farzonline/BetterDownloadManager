@@ -139,9 +139,7 @@ public sealed class SegmentedDownloader(HttpClient http, SpeedLimiter? limiter =
                 Report(progress, snap with { BytesPerSec = speed });
                 if (++ticks % 5 == 0)
                 {
-                    // A scanner or indexer briefly holding the sidecar must not fail a download that is otherwise fine.
-                    try { SegmentSidecar.Save(side, map, probe.ETag, probe.LastModified); }
-                    catch (IOException e) { Log.Error("Could not save the resume file", e); }
+                    SegmentSidecar.Save(side, map, probe.ETag, probe.LastModified); // skips (and logs) when another program holds it
                 }
             }
         }

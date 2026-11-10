@@ -381,6 +381,33 @@
     </Setter>
   </Style>
 
+  <!-- The downloads list, IDM-style: compact rows with a line under each and every other row shaded, so a long list reads easily -->
+  <Style x:Key="Style.GridRow" TargetType="ListViewItem">
+    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListViewItem">
+          <Border x:Name="Bd" MinHeight="26" Background="Transparent" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1" SnapsToDevicePixels="True">
+            <Grid>
+              <Border x:Name="Bar" Width="3" HorizontalAlignment="Left" Background="{DynamicResource Brush.Focus}" Visibility="Collapsed"/>
+              <GridViewRowPresenter Margin="4,1" VerticalAlignment="Center" Content="{TemplateBinding Content}" Columns="{TemplateBinding GridView.ColumnCollection}"/>
+            </Grid>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="ItemsControl.AlternationIndex" Value="1"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.BackgroundAlt}"/></Trigger>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Raised}"/></Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Brush.Selection}"/>
+              <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="GridViewColumnHeader">
     <Setter Property="Foreground" Value="{DynamicResource Brush.TextMuted}"/>
     <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}"/>
@@ -389,7 +416,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="GridViewColumnHeader">
-          <Border x:Name="Bd" Height="32" Padding="12,0" Background="Transparent" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,0,1">
+          <Border x:Name="Bd" Height="28" Padding="10,0" Background="Transparent" BorderBrush="{DynamicResource Brush.Line}" BorderThickness="0,0,1,1">
             <Grid>
               <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
               <Thumb x:Name="PART_HeaderGripper" HorizontalAlignment="Right" Width="6" Opacity="0" Cursor="SizeWE"/>

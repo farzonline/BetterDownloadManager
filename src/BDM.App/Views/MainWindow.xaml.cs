@@ -79,7 +79,7 @@ public partial class MainWindow : Window
         if (_progress.TryGetValue(id, out var open)) { open.BringBack(); return; }
         if (_manager.Get(id) is not { } rec) return;
         if (rec.State == DownloadState.Completed) { ShowComplete(rec, null); return; }
-        var w = new ProgressDialog(_manager, id, _settings.ShowCompleteDialog);
+        var w = new ProgressDialog(_manager, id, _settings);
         _progress[id] = w;
         w.Closed += (_, _) => _progress.Remove(id);
         w.Show();
@@ -204,8 +204,9 @@ public partial class MainWindow : Window
 
     void About_Click(object sender, RoutedEventArgs e)
     {
-        var v = typeof(MainWindow).Assembly.GetName().Version;
-        ShowBanner($"Better Download Manager {v?.ToString(3)} · personal download manager by Farzonline. DRM-protected video is never downloaded.");
+        var about = new AboutWindow();
+        DialogPlacement.Place(about);
+        about.ShowDialog();
     }
 
     // ---------------------------------------------------------------- list

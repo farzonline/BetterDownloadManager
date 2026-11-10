@@ -8,21 +8,29 @@
     var doc = opts.document;
     var host = null;
     var button = null;
+    var closer = null;
     var current = null;
+    var dismissed = new WeakSet(); // videos whose button the owner closed with x
 
     function place() {
       if (!button || !current) return;
       var rect = current.getBoundingClientRect();
+      var left = Math.max(28, rect.right - 168);
       button.style.top = rect.top + 8 + 'px';
-      button.style.left = Math.max(0, rect.right - 168) + 'px';
+      button.style.left = left + 'px';
+      // The x sits just left of the button, so it never depends on how wide the label is.
+      closer.style.top = rect.top + 12 + 'px';
+      closer.style.left = left - 26 + 'px';
     }
     function remove() {
       if (host) host.remove();
       host = null;
       button = null;
+      closer = null;
       current = null;
     }
     function show(video) {
+      if (dismissed.has(video)) return;
       if (button && current === video) { place(); return; }
       remove();
       current = video;
@@ -79,7 +87,31 @@
       button.addEventListener('pointerdown', sink);
       button.addEventListener('pointerup', lift);
       button.addEventListener('pointerleave', lift);
+      closer = doc.createElement('button');
+      closer.textContent = '✕';
+      closer.title = 'Hide this button';
+      closer.setAttribute && closer.setAttribute('aria-label', 'Hide this button');
+      var c = closer.style;
+      c.position = 'fixed';
+      c.zIndex = '2147483647';
+      c.width = c.height = '22px';
+      c.padding = '0';
+      c.font = '12px system-ui, sans-serif';
+      c.lineHeight = '22px';
+      c.color = '#fff';
+      c.background = 'rgba(20, 18, 40, 0.75)';
+      c.border = 'none';
+      c.borderRadius = '50%';
+      c.cursor = 'pointer';
+      closer.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!e.isTrusted) return;
+        dismissed.add(current);
+        remove();
+      });
       root.appendChild(button);
+      root.appendChild(closer);
       (doc.body || doc.documentElement).appendChild(host);
       place();
     }

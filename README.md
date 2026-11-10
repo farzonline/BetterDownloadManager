@@ -10,16 +10,18 @@ open-source behavior; no code from any commercial product.
   retries, speed limit (total and per download), checksum check, duplicate warning.
 - **Queues and schedule**: several queues with their own limits and time windows (overnight works), and an action
   when a queue finishes (sleep, hibernate, shut down).
-- **Everything IDM-style**: menu bar, big toolbar, category tree and sortable columns; a *download file info* dialog
+- **Everything IDM-style**: menu bar, big toolbar, category tree and a compact, lined list with sortable columns and each
+  file's own Windows icon; a *download file info* dialog
   before each download (category, save as, description, start now or later; a video is named after its page), a
   progress window per download (a row per connection with its speed, "To tray", its own speed limiter and what to do
-  when it finishes: exit, sleep, hibernate, shut down) and a *download complete* window; connections can be chosen per
+  when it finishes: exit, sleep, hibernate, shut down) and a *download complete* window; both dialogs resize and can hide
+  their details; connections can be chosen per
   download, and a server that allows fewer (free file hosts such as Hotlink allow one) just gets fewer;
   copied links open that dialog and *Add URL* fills in a copied link (both can be switched off); batch downloads
   (`photo[001-120].jpg`), site grabber, site logins, FTP/FTPS, proxies, drag-and-drop target, tray icon, history
   search, settings export/import.
 - **Browser extension** (Chrome, Edge, Brave and other Chromium browsers): takes over big downloads, adds a
-  *Download this video* button, a popup listing every video found on the page, and a *Download this page with yt-dlp* button.
+  *Download this video* button (with an × to hide it for that video), a popup listing every video found on the page, and a *Download this page with yt-dlp* button.
   When a site only lets a real browser fetch a file (Cloudflare-style bot protection), BDM downloads it *through the
   browser*: its engine still splits, pauses and resumes the file, but Chrome makes the requests with your own session
   (the extension's offscreen relay page; the browser must stay open). Older extensions fall back to the browser's own

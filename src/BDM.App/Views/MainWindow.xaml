@@ -83,7 +83,7 @@
           <TextBlock x:Name="StateIcon" Text="{Binding StateGlyph}" FontFamily="{DynamicResource Font.Icon}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource Brush.TextMuted}"/>
           <TextBlock x:Name="StateText" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}" VerticalAlignment="Center"/>
         </StackPanel>
-        <ProgressBar x:Name="Bar" Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" Height="4" Margin="0,4,0,0" Visibility="Collapsed"/>
+        <ProgressBar x:Name="Bar" Minimum="0" Maximum="100" Value="{Binding Progress, Mode=OneWay}" Height="3" Margin="0,2,0,0" Visibility="Collapsed"/>
       </StackPanel>
       <DataTemplate.Triggers>
         <DataTrigger Binding="{Binding StateKind}" Value="running">
@@ -289,7 +289,8 @@
 
         <ListView Grid.Row="1" x:Name="List" ItemsSource="{Binding Items}" SelectionMode="Extended" Background="{DynamicResource Brush.Background}" BorderThickness="0"
                   Margin="0,4,0,0" AutomationProperties.Name="Downloads" SelectionChanged="List_SelectionChanged" MouseDoubleClick="List_DoubleClick"
-                  GridViewColumnHeader.Click="Header_Click" VirtualizingPanel.IsVirtualizing="True">
+                  GridViewColumnHeader.Click="Header_Click" VirtualizingPanel.IsVirtualizing="True"
+                  ItemContainerStyle="{StaticResource Style.GridRow}" AlternationCount="2">
           <ListView.View>
             <GridView>
               <GridViewColumn Width="270">
@@ -297,11 +298,10 @@
                 <GridViewColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel Orientation="Horizontal">
-                      <Border Width="26" Height="26" CornerRadius="8" Background="{Binding CategoryHue, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Tint}">
-                        <TextBlock Text="{Binding CategoryGlyph}" FontFamily="{DynamicResource Font.Icon}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="{Binding CategoryHue, Converter={x:Static v:HueBrushConverter.Instance}, ConverterParameter=Brush}"/>
-                      </Border>
-                      <TextBlock Text="{Binding Name}" Margin="10,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}"/>
+                      <!-- The icon of the app that opens this file type, as in IDM -->
+                      <Image Source="{Binding Name, Converter={x:Static v:FileIconConverter.Instance}}" Width="16" Height="16" VerticalAlignment="Center"
+                             RenderOptions.BitmapScalingMode="NearestNeighbor" SnapsToDevicePixels="True"/>
+                      <TextBlock Text="{Binding Name}" Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}"/>
                     </StackPanel>
                   </DataTemplate>
                 </GridViewColumn.CellTemplate>
