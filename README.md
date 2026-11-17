@@ -1,11 +1,22 @@
 # Better Download Manager
 
+![Better Download Manager](docs/images/poster.png)
+
 A personal download manager for Windows in the style of Internet Download Manager, with a browser extension that
 catches the video streams other tools miss. Built from public specs (HTTP, FTP, HLS, DASH, Chrome extensions) and
 open-source behavior; no code from any commercial product.
 
 Windows 10/11 (x64) and Chromium-based browsers (Chrome, Edge, Brave). Not affiliated with Internet Download Manager or
 Tonec Inc.
+
+## Screenshots
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screenshot-light.png">
+  <img alt="The main window: categories, the download list with each file's own icon, live progress" src="docs/images/screenshot-dark.png">
+</picture>
+
+<p align="center"><img alt="A download's own progress window with 8 connections" src="docs/images/progress-window.png" width="420"></p>
 
 ## What it does
 
