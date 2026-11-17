@@ -4,6 +4,9 @@ A personal download manager for Windows in the style of Internet Download Manage
 catches the video streams other tools miss. Built from public specs (HTTP, FTP, HLS, DASH, Chrome extensions) and
 open-source behavior; no code from any commercial product.
 
+Windows 10/11 (x64) and Chromium-based browsers (Chrome, Edge, Brave). Not affiliated with Internet Download Manager or
+Tonec Inc.
+
 ## What it does
 
 - **Fast downloads**: several connections per file, dynamic splitting, resume after a restart or a dropped link,
@@ -37,6 +40,13 @@ open-source behavior; no code from any commercial product.
 DRM-protected video (Widevine, PlayReady, FairPlay) is detected and refused. BDM never tries to get around it.
 
 ## Install
+
+**From a release:** download `BDM-Setup.exe` from the [Releases](https://github.com/farzonline/BetterDownloadManager/releases)
+page, run it (it installs for your user only, no administrator rights), then load the browser extension as in step 3
+below. For video pages and stream merging, install [ffmpeg](https://ffmpeg.org/) and [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+and put them on your PATH or set their paths in *Options*.
+
+**From source:**
 
 1. Run `tools\build-release.ps1` (needs the .NET 8 SDK, Node 22+, and Inno Setup: `winget install JRSoftware.InnoSetup`).
    Put `ffmpeg.exe` and `ffprobe.exe` (and optionally `yt-dlp.exe`) in `installer\vendor\` first to bundle them, or
@@ -80,3 +90,7 @@ be shown on that website: see `docs/corpus-sites.md`.
 | `extension/` | the Chromium extension (Manifest V3, plain JavaScript) |
 | `tests/` | unit/integration tests and the browser acceptance suite |
 | `docs/superpowers/` | design and implementation plan |
+
+## License
+
+[MIT](LICENSE) © 2026 Farzonline
